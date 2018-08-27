@@ -1,0 +1,102 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+require(raster)
+require(rgdal)
+```
+
+
+```{r}
+
+pathToFiles  <- 'd://SHARE/PROYECTOS/MARE/02_PROJECTS/02_DATA_MANAGEMENT/DATA/GEODATA/SRTM/30m/'
+
+lszip <- paste0(pathToFiles,list.files(path = pathToFiles, pattern = 'zip'))
+
+srtm30m_madeira <- lapply(X = lszip, FUN = unzip)
+
+# to merge raster we can use merge or mosaic, merge uses the values of the upper layer while mosaic compute cell values using a function. Also gdal have some useful function
+
+# convert original STRM1 to TIFF
+
+gdal_translate(src_dataset = srtm30m_madeira[[1]] , dst_dataset = '../SRTM/30m/tiff/N30W016.tif', a_nodata = 0)
+gdal_translate(src_dataset = srtm30m_madeira[[2]] , dst_dataset = '../SRTM/30m/tiff/N30W017.tif', a_nodata = 0)
+gdal_translate(src_dataset = srtm30m_madeira[[3]] , dst_dataset = '../SRTM/30m/tiff/N32W017.tif', a_nodata = 0)
+gdal_translate(src_dataset = srtm30m_madeira[[4]] , dst_dataset = '../SRTM/30m/tiff/N32W018.tif', a_nodata = 0)
+gdal_translate(src_dataset = srtm30m_madeira[[5]] , dst_dataset = '../SRTM/30m/tiff/N33W017.tif', a_nodata = 0)
+
+pathToFiles  <- 'd://SHARE/PROYECTOS/MARE/02_PROJECTS/02_DATA_MANAGEMENT/DATA/GEODATA/SRTM/30m/tiff/'
+
+raster.list <- list.files(path=pathToFiles,  pattern =".tif$", full.names=TRUE)
+r1 <-raster(raster.list[1])
+r2 <-raster(raster.list[2])
+r3 <-raster(raster.list[3])
+r4 <-raster(raster.list[4])
+r5 <-raster(raster.list[5])
+
+
+srtm30.mosaic <- mosaic(r1, r2, r3, r4, r5, fun=max)
+writeRaster(srtm30.mosaic, "output/srtm30.tif", overwrite=TRUE)
+res(srtm30.mosaic)
+srtm30.mosaic.2942 <- projectRaster(srtm30.mosaic, crs = CRS("+init=epsg:2952")) # project to UTM 2952
+res(srtm30.mosaic.2942)
+plot(srtm30.mosaic)
+
+```
+
+
+```{r}
+srtm30.mosaic.slope_radians <- terrain(x = srtm30.mosaic, opt = "slope", units="radians")
+writeRaster(srtm30.mosaic.slope_radians, "output/srtm30_slope_radians.tif")
+rm(srtm30.mosaic.slope_radians)
+
+srtm30.mosaic.slope_degrees <- terrain(x = srtm30.mosaic, opt = "slope", units="degrees")
+writeRaster(srtm30.mosaic.slope_degrees, "output/srtm30_slope_degrees.tif")
+rm(srtm30.mosaic.slope_degrees)
+
+srtm30.mosaic.aspect <- terrain(x = srtm30.mosaic, opt = "aspect", units="degrees")
+writeRaster(srtm30.mosaic.aspect, "output/srtm30_aspect.tif")
+rm(srtm30.mosaic.aspect)
+
+srtm30.mosaic.aspect_radians <- terrain(x = srtm30.mosaic, opt = "aspect", units="radians")
+writeRaster(srtm30.mosaic.aspect_radians, "output/srtm30_aspect_radians.tif")
+rm(srtm30.mosaic.aspect_radians)
+
+# TRI (Terrain Ruggedness Index) is the mean of the absolute differences between the value of a cell and the value of its 8 surrounding cells.
+srtm30.mosaic.tpi <- terrain(x = srtm30.mosaic, opt = "tpi")
+writeRaster(srtm30.mosaic.tpi, "output/srtm30_tpi.tiff")
+rm(srtm30.mosaic.tpi)
+
+#TPI (Topographic Position Index) is the difference between the value of a cell and the mean value of its 8 surrounding cells. 
+srtm30.mosaic.tri <- terrain(x = srtm30.mosaic, opt = "tri")
+writeRaster(srtm30.mosaic.tri, "output/srtm30_tri.tiff")
+rm(srtm30.mosaic.tri)
+# Roughness is the difference between the maximum and the minimum value of a cell and its 8 surrounding cells.
+srtm30.mosaic.roughness <- terrain(x = srtm30.mosaic, opt = "roughness")
+writeRaster(srtm30.mosaic.roughness, "output/srtm30_roughness.tiff")
+rm(srtm30.mosaic.roughness)
+# flowdir returns the 'flow direction' (of water), i.e. the direction of the greatest drop in elevation (or the smallest rise if all neighbors are higher). They are encoded as powers of 2 (0 to 7). The cell to the right of the focal cell 'x' is 1, the one below that is 2, and so on
+
+srtm30.mosaic.flowdir <- terrain(x = srtm30.mosaic, opt = "flowdir")
+writeRaster(srtm30.mosaic.flowdir, "output/srtm30_flowdir.tiff")
+rm(srtm30.mosaic.flowdir)
+```
+
+
+```{r}
+srtm30.mosaic.slope.radians <- raster("output/srtm30_slope_radians.tif")
+srtm30.mosaic.aspect.radians <- raster("output/srtm30_aspect_radians.tif")
+srtm30.mosaic <- raster("output/srtm30.tif")
+
+srtm30.mosaic.hillshade <- hillShade(slope = srtm30.mosaic.slope.radians, 
+                                     aspect = srtm30.mosaic.aspect.radians,
+                                     40, 270)
+
+writeRaster(srtm30.mosaic.hillshade, "output/srtm30_hillshade.tiff")
+rm(srtm30.mosaic.flowdir)
+
+```
+
+

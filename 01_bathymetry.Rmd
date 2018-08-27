@@ -1,0 +1,435 @@
+---
+title: "Processing bathymetry data"
+output: html_notebook
+---
+
+```{r}
+library(devtools)
+
+```
+
+
+## Marmap
+
+Marmap packages provide global hr bathymetric data from NOAA servers, including topo1
+
+```{r}
+# install.packages("marmap")
+library(marmap)
+library(raster)
+
+read_sf('')
+bbox()
+
+rasterfile <- "output/bathy_etopo1_madeira.tif"
+if (file.exists(rasterfile)) {
+  madeira.bathy.ras <- raster("output/bathy_etopo1_madeira.tif")
+  contour(madeira.bathy.ras)
+} else {
+  madeira.bathy <- getNOAA.bathy(lon1=-32,
+                                 lon2=-5,
+                                 lat1=24,
+                                 lat2=42, 
+                                 resolution=1)
+  save(madeira.bathy, file = "output/bathy_etopo1_madeira.tif")
+  madeira.bathy.ras <-  as.raster(madeira.bathy)
+  writeRaster(madeira.bathy.ras, filename = "output/bathy_etopo1_madeira.tif", overwrite=TRUE)
+  plot(madeira.bathy)
+}
+
+
+```
+
+Let's plot a 3d map
+```{r}
+library(lattice)
+wireframe(unclass(madeira.bathy), shade = TRUE, aspect = c(1/2, 0.1))
+```
+
+## Depth contour polygons
+
+
+ETOPO1 is a 1 arc-minute global relief model of Earth's surface that integrates land topography and ocean bathymetry. Built from global and regional data sets, it is available in "Ice Surface" (top of Antarctic and Greenland ice sheets) and "Bedrock" (base of the ice sheets). 
+
+
+Considering the previously cited resolution (1 arc-minute global).
+
+At sea level at the equator:
+
+One degree of longitude is about 111km
+One minute of longitude is one sixtieth of that: about 1.85km
+One second of longitude is one sixtieth of that amount: about 31 meters or 100 feet.
+
+
+```{r}
+madeira.bathy.ras.2952 <- projectRaster(madeira.bathy.ras, crs = CRS("+init=epsg:2952"))
+res(madeira.bathy.ras.2952)
+rm(madeira.bathy.ras.2952)
+```
+
+Which gives a resolution of 1690x1920
+
+The minimum contour interval is the double vertical error (RMSE or standard deviation) of the height model. You can find that for ASTER GDEM in Lang, R. Harold, and Roy Welch. 1999. “Algorithm theoretical basis document for ASTER digital elevation models.” It's defined by the "United States National Map Accuracy Standards (NMAS)". For example: If your DHM have a resolution of 2x2m, and the vertical error is 4m, you can extract contours of a minimum of 8m.
+
+For ETOPO1: considering a mean horizontal resolution of 1850 meters and vertical accuracy of 10 meters (source: https://www.ngdc.noaa.gov/mgg/global/global.html), can we  build the contour following guidelines described in the aboved paper?
+
+```{r}
+library(rgdal)
+library(gdalUtils)
+require(raster)
+
+output_shapefile <- paste(tempfile(),".shp",sep="")
+input_dem  <- raster("output/bathy_etopo1_madeira.tif")
+
+max.depth <-  madeira.bathy.ras[cellStats(madeira.bathy.ras, stat = "max")]
+
+
+contour_output_100 <- gdal_contour(src_filename="output/bathy_etopo1_madeira.tif",dst_filename="output/md_etopo1_bathymetry_100.shp",a="Elevation",i=100, fl=seq(0,max.depth, -100), output_Vector=TRUE) # i=1000 is probably ignored if fl provided
+
+contour_output_1000 <- gdal_contour(src_filename="output/bathy_etopo1_madeira.tif",dst_filename="output/md_etopo1_bathymetry_1000.shp",a="Elevation",i=1000, fl=seq(0,max.depth, -1000), output_Vector=TRUE)
+
+```
+
+Both QGIS and SAGA have some algorythms to convert lines to polygon. However yielded polygons overlaps. GRASS can fix topology to a certain grade. In QGIS possible to style the layers so underlying polygons are showed. Later we can smooth the polygons in QGIS using Smooth geometry.
+
+Here we only get the polygons from contour. Additionally we also import the polygons to grass to fix topology and export to shapefile. 
+
+```{r}
+require(sp)
+require(raster)
+require(sf)
+require(rgeos)
+# attach RQGIS
+require("RQGIS")
+require("RSAGA")
+
+
+set_env('c:/Program Files/QGIS 2.18/')
+find_algorithms(search_term = "([Pp]olygon)")
+params <- get_args_man(alg = "qgis:linestopolygons")
+
+contour_output_100_selection <- st_read('output/md_etopo1_bathymetry_100_selection.shp') 
+
+get_usage(alg = "qgis:linestopolygons")
+
+params$INPUT <- contour_output_100_selection
+params$OUTPUT <- file.path('./output/', 'foo2.shp')
+params
+
+
+out <- run_qgis(alg = "qgis:linestopolygons",
+                params = params,
+                load_output = TRUE)
+
+
+out <- st_intersection(out, out)
+out %>% group_by.sf(ID)
+
+st_write(out,dsn='./output/md_etopo1_bathymetry_100_polygon_temp.shp')
+
+
+# sf_contour_output_1000 <- st_as_sf(contour_output_1000)
+# sf_contour_output_1000_polygons <- st_polygonize(sf_contour_output_1000)
+# st_collection_extract(sf_contour_output_1000_polygons, type = 'POLYGON')
+# 
+# sf_contour_output_1000_polygons_sp <- as(sf_contour_output_1000_polygons, "Spatial")
+# 
+# clip <- gIntersection(sf_contour_output_1000_polygons, sf_contour_output_1000_polygons, byid = TRUE, drop_lower_td = TRUE) 
+# 
+# plot(sf_contour_output_1000_polygons)
+# st_write(sf_contour_output_1000_polygons,dsn='./output/md_etopo1_bathymetry_1000_polygon.shp')
+```
+
+```{r}
+# SAGA
+# find_algorithms(search_term = "([Pp]olygon)")
+# params <- get_args_man(alg = "saga:convertlinestopolygons")
+# 
+# get_usage(alg = "saga:convertlinestopolygons")
+# 
+# params$LINES <- contour_output_100_selection
+# params$POLYGONS <- file.path('./output/', 'foo2_saga.shp')
+# params
+# 
+# 
+# out <- run_qgis(alg = "saga:convertlinestopolygons",
+#                 params = params,
+#                 load_output = TRUE)
+# 
+# st_write(out,dsn='./output/md_etopo1_bathymetry_100_polygon_temp.shp')
+
+
+
+```
+
+
+```{r}
+madeira.bathy.ras.contour <- rasterToContour(madeira.bathy.ras)
+writeOGR(obj=madeira.bathy.ras.contour, dsn="output", layer="bathy_etopo1_madeira", driver="ESRI Shapefile") # this is in geographical projection
+
+```
+
+Etopo1 has a low resolution. From EMODNET  is possible to donwload a better Digital Terrain Model (DTM) for the European sea regions. Res: 1/8 *1/8 arcminutes grid. 
+
+http://www.emodnet-bathymetry.eu/
+
+We have already downloaded two tiles in xyz and netcdf formats. First we neet to read the files and then we can merge them because Madeira Islands fall in the middle.
+
+
+```{r}
+# Read netcdf 
+# check this http://geog.uoregon.edu/bartlein/courses/geog490/week04-ncdf4-vs-raster.html
+
+require(raster)
+require(ncdf4)
+
+A4.mnt <- nc_open( "../../../../02_DATA_MANAGEMENT/DATA/GEODATA/EMODnet/A4.mnt/A4.mnt") # open nc   
+
+A4.mnt.depth_smooth <- ncvar_get(A4.mnt, varid = c("DEPTH_SMOOTH")) # get depth_smooth var
+
+
+A4.mnt.depth_smooth.raster <- raster(A4.mnt.depth_smooth) # convert to raster
+proj4string(A4.mnt.depth_smooth.raster) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs") # set projection
+
+# raster are inverted
+
+A4.mnt.depth_smooth.raster <- t(flip(A4.mnt.depth_smooth.raster, direction='x' ))
+
+lat <- A4.mnt$dim$LINES$vals   # latitude position
+lon <- A4.mnt$dim$COLUMNS$vals  # longitude position
+
+
+## bear in mind that in netcdf files the lat and long correspond to the center of the cell. Coversely for tiff files lat long represent the left upper corner.
+
+
+A4.res <- res(A4.mnt.depth_smooth.raster)
+
+# lat <- c((min(lat) - A4.res[2]/2), max(lat) + A4.res[2]/2)
+# lon <- c((min(lon) - A4.res[2]/2), max(lon) + A4.res[2]/2)
+
+
+#extent(A4.mnt.depth_smooth.raster) <- extent(c(range(lon), range(lat))) # set extent
+
+# from qgis metadata xmin ymin xmax ymax
+# extent object  xmin, xmax; second row: ymin, ymax)
+extA <- extent(c(-36.0000000000000000,
+                 -16.2500000000000000, 
+                 24.9999999999999964,
+                 40.0000000000000000))
+
+extent(A4.mnt.depth_smooth.raster) <- extA
+
+plot(A4.mnt.depth_smooth.raster)
+
+
+# the same for B4
+B4.mnt <- nc_open( "../../../../02_DATA_MANAGEMENT/DATA/GEODATA/EMODnet/B4.mnt/B4.mnt")     
+B4.mnt.depth_smooth <- ncvar_get(B4.mnt, varid = "DEPTH_SMOOTH")
+B4.mnt.depth_smooth.raster <- raster(B4.mnt.depth_smooth)
+proj4string(B4.mnt.depth_smooth.raster) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+B4.mnt.depth_smooth.raster <- t(flip(B4.mnt.depth_smooth.raster, direction='x' ))
+
+lat <- B4.mnt$dim$LINES$vals   # latitude position
+lon <- B4.mnt$dim$COLUMNS$vals  # longitude position
+
+B4.res <- res(B4.mnt.depth_smooth.raster)
+
+# lat <- c((min(lat) - B4.res[2]/2), max(lat) + B4.res[2]/2)
+# lon <- c((min(lon) - B4.res[2]/2), max(lon) + B4.res[2]/2)
+# extent(B4.mnt.depth_smooth.raster) <- extent(c(range(lon), range(lat))) # set extent
+
+extB <- extent(
+          c(-16.2500000000000000,
+          3.5000000000000000,
+          24.9999999999999964,
+          40.0000000000000000))
+
+extent(B4.mnt.depth_smooth.raster) <- extB
+
+plot(B4.mnt.depth_smooth.raster)
+
+# madeira <- st_read('../../../../02_DATA_MANAGEMENT/GIS/Marine GIS/output/freguesias.shp')
+
+
+```
+
+It's time to merge raster files
+```{r}
+
+# First remove some objects to allocate memory space
+
+rm(madeira.bathy)
+
+# then merge
+
+A4B4.raster <- merge(A4.mnt.depth_smooth.raster, 
+                     B4.mnt.depth_smooth.raster
+                     #tolerance = 0.1
+                     )
+writeRaster(A4B4.raster, filename = 'output/A4B4.tif', overwrite=TRUE)
+plot(A4B4.raster) # :)
+
+A4B4.raster.mosaic <-  mosaic(A4.mnt.depth_smooth.raster, B4.mnt.depth_smooth.raster, fun=max)
+writeRaster(A4B4.raster.mosaic, filename = 'output/A4B4_mosaic.tif', overwrite=TRUE)
+
+# note: need to understand netcdf to tif extent offset respecting qgis
+
+```
+
+The bathymetry is quite big, let's try to clip the raster with some other layer or extent
+
+```{r}
+
+A4B4.raster.crop <- (crop(A4B4.raster, extent(-22, -8, 26  , 40)))
+writeRaster(A4B4.raster.crop, filename = 'output/A4B4_crop.tif', overwrite=TRUE)
+
+rm(A4B4.raster)
+
+A4B4.raster.crop.2952 <- projectRaster(A4B4.raster.crop, crs = CRS("+init=epsg:2952"))
+
+writeRaster(A4B4.raster.crop, filename = 'output/A4B4_crop_2952.tif', overwrite=TRUE)
+
+```
+
+## Sf
+
+From a network of depth points we want to make an interpolation and build a bathymetry in raster format.
+
+```{r}
+
+library(sf)
+Madeira_malha8seg <- st_read("D:/SHARE/PROYECTOS/MARE/02_PROJECTS/02_DATA_MANAGEMENT/DATA/GEODATA/IH/Madeira_malha8Seg/Madeira_malha8seg.shp")
+class(Madeira_malha8seg)
+plot(Madeira_malha8seg)
+
+```
+
+
+
+## rgrass7
+
+Interface to grass gis
+
+```{r}
+library(rgrass7)
+
+execGRASS()
+```
+
+
+```{r}
+class(Madeira_malha8seg)
+Madeira_malha8seg.sp <- as(Madeira_malha8seg, "Spatial")
+
+library(dismo)
+v <- voronoi(Madeira_malha8seg.sp)
+plot(v)
+
+```
+
+```{r}
+e <- extent(6, 6.4, 49.7, 50)
+
+```
+
+```{r}
+
+rgdal::readOGR(dsn = "../../CleanAtlant")
+
+```
+
+
+## raster
+
+Raster pakage for raster data. We want to calculate some dem derived 
+
+```{r}
+require(raster)
+
+dem <- raster(x = 'D:/SHARE/PROYECTOS/MARE/02_PROJECTS/02_DATA_MANAGEMENT/GIS/Marine GIS/output/DEM.tif') ## load dem, but need metadata.. There's also an error on maximum altitude going beyond the 1800 metres maximum from Madeira
+
+res(dem) # res in degrees
+
+# http://spatialreference.org/ref/epsg/4663/
+# https://epsg.io/4663
+
+
+dem.2942 <- projectRaster(dem, crs = CRS("+init=epsg:2952")) # project to UTM 2952
+res(dem.2942)
+
+
+filter_dem <- dem %in% 2000:4000
+
+dem <- mask(dem, filter_dem <- dem %in% 2000:3000, maskvalue = 1)
+
+
+x <- terrain(dem, opt=c("slope", "aspect", "TPI", "TRI", "roughness", "flowdir"), unit="degrees") 
+
+class(x)
+plot(x)
+
+plot(x[[1]])
+
+plot(hillShade(x[[4]], x[[5]], angle=45, direction=0, normalize=FALSE), col=grey(0:100/100), legend=FALSE)  
+plot(dem, col=rev(terrain.colors(10, alpha=0.35)), add=TRUE)
+
+
+
+```
+Let's get 90m resolution dem data from srtm using raster package
+
+```{r}
+
+austria0 <- getData('GADM', country='AUT', level=0)
+
+```
+
+
+## Bathymetry from Portugal
+
+
+
+```{r}
+mad.8seg <- st_read('./../data/IH/Madeira_malha8Seg/Madeira_malha8seg.shp')
+plot(mad.8seg)
+```
+
+
+```{r}
+mad.8seg.2942 <- st_transform(mad.8seg, 2942)
+
+mad.8seg.sp <- as(mad.8seg.2942, "Spatial")
+
+rast <- raster(ext=extent(mad.8seg.sp), resolution=250)
+rasOut<-rasterize(mad.8seg.sp, rast, -mad.8seg.sp$z, fun = mean) # we use a mean function here to regularly grid the irregular input points
+plot(rasOut)
+
+writeRaster(rasOut, "output/mad8seg_250.tif")
+
+```
+
+
+```{r}
+require(rgdal)
+require(gdalUtils)
+gdal_setInstallation("C:\\Program Files\\GDAL/", rescan=TRUE)
+
+gdal_contour(src_filename = rasOut, a="elev", ,i=10, dst_filename = 'output/mad8seg_contour.shp')
+
+```
+
+
+
+```{r}
+library(plotKML)
+
+mad.8seg.ras <- vect2rast(mad.8seg.sp, fname=)
+plot(mad.8seg.ras)
+```
+
+
+r.geomorphon - Calculates geomorphons (terrain forms) and associated geometry using machine vision approach.
+
+https://grass.osgeo.org/grass74/manuals/addons/r.geomorphon.html
+

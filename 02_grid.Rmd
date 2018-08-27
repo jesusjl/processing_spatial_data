@@ -1,0 +1,602 @@
+---
+title: "Creating a grid framework for Madeira Island"
+output: html_notebook
+---
+
+## Introduction
+
+Regarding the Marine GIS Project, a grid framework is required to model species distribution on the shore line. Several aspect need to be considered when modeling the species distribution, including the bathymetric data, extend, distance to shoreline, predictors such Chlorophyll, temperature, geomorphology and so on. A grid allows to summarize several variables in a regular shape. 
+
+## Loading required libraries
+
+```{r echo=FALSE}
+
+# loading some useful libraries
+library(dismo)
+library(XML)
+library(maptools)
+library(sp)
+library(sf)
+library(raster)
+library(foreign)
+library(rgdal)
+library(tidyverse)
+```
+
+# Set some variables and constant
+
+```{r}
+# See www.spatialreference.org
+
+mad.portost.proj <- CRS("+init=epsg:2942")
+wgs1984.proj <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+nm <- 1852
+```
+
+
+## Import data 
+
+```{r echo=FALSE, message= FALSE}
+
+municipios <- st_read('output/municipios.shp')
+
+```
+
+Package sf has several useful function to take on mind during this project. Check on R for information
+
+**st_as_sf()**, **st_buffer**, **st_make_grid()**, **st_graticule()**, **st_cast**
+
+
+## Clean data
+
+First get the coast line
+
+```{r}
+
+require(dplyr)
+
+# dissolve municipio to obtain the coast line (using dplyr)
+
+#dissolve (https://stackoverflow.com/questions/44314922/dissolving-polygon-features-with-the-sf-package)
+
+cl.pol <- municipios %>% group_by(1)  %>% summarize()  # use 1 to group all, otherwise using "IHLA" attribute return 2 polygons.
+
+# include some attributes
+cl.pol<- within(cl.pol, rm(`1`))
+
+cl.pol$id <- as.integer(1)
+cl.pol$name <- "Região Autónoma da Madeira"
+cl.pol$area <- (st_area(cl.pol))
+cl.pol$perimeter <- (st_length(cl.pol))
+
+cl.pol <-cl.pol[, c("id", "name", "area", "perimeter")]
+
+
+cl.line <- st_cast(cl.pol, to = 'MULTILINESTRING')
+cl.line <- dplyr::select(cl.line,"id", "name", "perimeter")
+cl.line <- st_set_crs(cl.line, 4326)
+
+municipios.single <- st_cast(municipios, to = "POLYGON") # duplicate fields not good
+
+plot(cl.pol)
+plot(cl.line)
+
+st_write(cl.pol, "output/madeiraP.shp",delete_dsn = T)
+st_write(cl.line, "output/madeiraL.shp",delete_dsn = T)
+
+st_write(municipios.single, "output/temp.shp",delete_dsn = T)
+
+
+# Extracting main land  is not an easy task because Savage Island are also included and there's no attribute to split them. Should we also consider minor islot and rocks? Yep, why not, also to avoid clipping later for land features.
+
+cl.pol.mad <- municipios %>%  
+  filter(Ilha=="Ilha da Madeira (Madeira)") %>%
+  group_by(Ilha)  %>% 
+  summarize() # Savage Islands and Desertas included
+
+st_write(cl.pol.mad, "output/cl_pol_mad.shp", delete_dsn = T)
+
+cl.pol.mad$Ilha<- droplevels(cl.pol.mad$Ilha)
+
+plot(cl.pol.mad) # without Porto Santo
+
+
+```
+
+## Project
+
+Some operation are advice to be done using projected dataset.
+
+```{r}
+cl.pol.mad.2942 <-cl.pol.mad %>%  st_transform(2942)
+plot(cl.pol.mad.2942)
+```
+
+
+## Buffer
+
+With vector
+
+```{r}
+# # list of buffers polygons at different lenght
+# 
+# require(sf)
+# require(dplyr)
+# 
+# seq.buffer <-seq(100,2000, 100) # allocate a list vector of length equal to number of buffer required
+# 
+# 
+# cl.pol.mad <- st_as_sf(data.frame(cl.pol.mad))
+# 
+# k <- vector('list', length(seq.buffer))
+# for (i in 1:length(seq.buffer)) {
+#   k[[i]] <- st_buffer(x =cl.pol.mad.2942, dist = seq.buffer[i] )
+#   k[[i]]$id <- i
+#   k[[i]]$distance <- seq.buffer[i]
+# }
+# 
+# # clip from the bigger to the lower 
+# 
+# l <- vector('list', length(seq.buffer))
+# 
+# for (i in length(seq.buffer):1) {
+#   if(i==1){
+#     l[[i]] <- st_difference(select(k[[i]],
+#                                        -Ilha), 
+#                                        select(cl.pol.mad.2942, -Ilha))
+#   } 
+#   else {
+#     l[[i]] <- st_difference(select(k[[i]],
+#                                        -Ilha), 
+#                                        select(k[[i - 1]], -Ilha))
+#   }
+# }
+# 
+# if (length(seq.buffer) == 2) {
+#    temp <- st_union(l[[1]], l[[2]], by_feature=false)
+#   } else {
+#     temp <- st_union(l[[1]], l[[2]])
+#     for (m in 3:length(seq.buffer)) {
+#     temp <- st_union(temp, l[[m]] ,by_feature=false)
+#   }
+#   }
+# 
+# temp <- st_cast(temp, "POLYGON")
+# 
+# plot(temp)
+# 
+# st_write(temp, dsn = 'output/buffer_100_2000.shp', delete_dsn = T) # save buffer
+```
+
+
+
+
+```{r}
+# list of buffers polygons at different lenght
+
+require(sf)
+require(dplyr)
+
+seq.buffer <-seq(100,2000, 100) # allocate a  vector of length equal to number of buffer required
+
+
+cl.pol.mad.2942 <- st_as_sf(data.frame(cl.pol.mad.2942))
+
+k <- vector('list', length(seq.buffer))
+for (i in 1:length(seq.buffer)) {
+  k[[i]] <- st_buffer(x =cl.pol.mad.2942, dist = seq.buffer[i] )
+  k[[i]]$idx <- i
+  k[[i]]$distance <- seq.buffer[i]
+  st_agr(k[[i]]) = "constant"
+}
+
+# clip from the bigger to the lower 
+
+l <- vector('list', length(seq.buffer))
+
+for (i in length(seq.buffer):1) {
+  
+  if(i==1){
+    l[[i]] <- st_difference(k[[i]], st_geometry(cl.pol.mad.2942))
+  } 
+  else {
+    l[[i]] <- st_difference(k[[i]], st_geometry(k[[i - 1]]))
+  }
+}
+
+# Join all multipolygon
+
+if (length(seq.buffer) == 2) {
+   temp <- rbind(l[[1]], l[[2]])
+  } else {
+    temp <- rbind(l[[1]], l[[2]])
+    for (m in 3:length(seq.buffer)) {
+    temp <- rbind(temp, l[[m]])
+  }
+  }
+
+temp  <-temp %>%  st_transform(4326)
+
+
+plot(temp)
+
+st_write(temp, dsn = 'output/buffer_100_2000.shp', delete_dsn = T) # save buffer
+```
+
+
+With raster (distance matrix)
+
+
+
+
+
+## Creating grids 
+
+Before creating the grid, let's get into detail respecting the factors required to model species.
+
+- Extend: A buffer lenght of 1 nautical mile (1852 metres) looks a reasonable distance to model species distribution? Plot species and check distance to coast. From here a bounding box can be calculated. Consider using EEZ of Madeira, but check if to big...
+
+- Distance to shoreline: how many intervals to consider? It is worth to round the buffer size to 2 km and included intervals of 100 meters. What is the distance between contour lines? Distance matrix or buffer
+
+- Distance to protected areas:
+
+- Chlorophyll: which resolution, source to get data, period of time considered and temporal summary. 
+
+- Temperature: resolution, source to get data, etc.
+
+- Morphology: worth to consider? Check grass
+
+
+Bounding box
+
+```{r}
+
+buffer.20 <- st_cast(l[[20]], "POLYGON") #  convert to polygon
+
+buffer.20$id <- c(1,2,3,4) # included an id to subset
+buffer.20.md <- (filter(buffer.20, id==4)) # get polygon number 4
+bbox.md <- (st_as_sfc(st_bbox(buffer.20.md))) # convert bbox to polygon
+
+```
+
+
+
+## Grid res=2km dist= 2km
+
+```{r}
+
+bbox.md.eq <- st_transform(bbox.md, crs = 3035) # ETRS89 Lambert Azimuthal Equal-Area 
+mad.eq <- st_transform(l[[20]], crs = 3035) 
+r <- raster(as(bbox.md.eq, "Spatial"))
+res(r) <- 200
+r[] <- rnorm(ncell(r))
+plot(r)
+plot(bbox.md.eq, add=T)
+plot(mad.eq, add=T)
+r[] <- 0
+```
+
+We need to center the projection to madeira to avoid distortions in shape.
+
+
+```{r}
+mad.ea.proj <- st_crs(bbox.md.eq)
+mad.centroid <- st_coordinates(st_centroid(cl.pol.mad)) # get centroid 
+
+mad.ea.proj <- "+proj=laea +lat_0=32.73281 +lon_0=-16.98576 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" 
+ 
+bbox.md.eq_alt <- st_transform(bbox.md, crs = mad.ea.proj) # CUSTOM ETRS89 Lambert Azimuthal Equal-Area 
+
+mad.eq_alt <- st_transform(l[[20]], crs = mad.ea.proj) # transform last buffer
+
+r <- raster(as(bbox.md.eq_alt, "Spatial")) # convert to spatial -> raster
+res(r) <- 2000 # set res
+r[] <- rnorm(ncell(r)) # raster need values to be plotted..
+plot(r)
+plot(bbox.md.eq, add=T)
+plot(mad.eq_alt, add=T)
+r[] <- 0
+
+
+# we need to transform the custom projection to utm and geographical coordinates for gis purposes.
+r.4326 <- projectRaster(r, crs = "+init=epsg:4326")
+
+writeRaster(r.4326, "output/grid_eqa_2km.shp")
+
+```
+
+
+Converting raster grid to polygon
+
+```{r}
+rToPoly <- as(r.4326, 'SpatialPolygonsDataFrame') # grid as polygon
+plot(rToPoly)
+rToPoly <- st_as_sf(rToPoly) # easier to save using sf classes
+st_write(rToPoly, "output/p_4326.shp", delete_dsn = T)
+```
+
+
+At the end chances are that the raster grid need to be fitted to the most important ancillary data available. For now it is ok.
+
+
+
+## Grid res=1km dist=2km
+
+```{r}
+
+buffer_100_2000 <- st_read(dsn = 'output/buffer_100_2000.shp')
+st_bbox(buffer_100_2000)
+
+
+r <- raster(as(bbox.md.eq_alt, "Spatial")) # convert to spatial -> raster
+res(r) <- 1000 # set res
+r[] <- rnorm(ncell(r)) # raster need values to be plotted..
+plot(r)
+plot(bbox.md.eq, add=T)
+plot(mad.eq_alt, add=T)
+r[] <- 0
+
+
+# we need to transform the custom projection to utm and geographical coordinates for gis purposes.
+r.4326 <- projectRaster(r, crs = "+init=epsg:4326")
+
+writeRaster(r.4326, "output/r_4326_1km.tif")
+```
+
+
+## Grid using EZZ 
+
+
+Read EZZ
+
+```{r}
+require(sf)
+ezz <- st_read(dsn = '../../../GIS/Marine GIS/output/EEZ_Madeira.shp')
+ezz.box <- st_bbox(ezz)
+```
+
+
+## Grid using MODIS 4Km
+
+
+```{r}
+require(raster)
+
+CHLA4KM.crop <- raster('output/CHLA4KM_crop.tif') # read raster file saved on 03_EMISR script
+
+r <- CHLA4KM.crop[[1]]
+r[] <- rnorm(ncell(r))
+
+rToPoly <- as(r, 'SpatialPolygonsDataFrame') # grid as polygon
+
+plot(rToPoly)
+rToPoly <- st_as_sf(rToPoly) # easier to save using sf classes
+st_write(rToPoly, "output/grid_4km.shp", delete_dsn = T)
+
+```
+
+```{r}
+
+r <- CHLA4KM.crop[[1]]
+r[] <- rnorm(ncell(r))
+
+r <- disaggregate(r, fact=2)
+rToPoly <- as(r, 'SpatialPolygonsDataFrame') # grid as polygon
+
+plot(rToPoly)
+rToPoly <- st_as_sf(rToPoly) # easier to save using sf classes
+st_write(rToPoly, "output/grid_2km.shp", delete_dsn = T)
+
+```
+
+```{r}
+
+r <- CHLA4KM.crop[[1]]
+r[] <- rnorm(ncell(r))
+
+r <- disaggregate(r, fact=4)
+rToPoly <- as(r, 'SpatialPolygonsDataFrame') # grid as polygon
+
+plot(rToPoly)
+rToPoly <- st_as_sf(rToPoly) # easier to save using sf classes
+st_write(rToPoly, "output/grid_1km.shp", delete_dsn = T)
+
+```
+
+
+
+## EZZ
+
+https://www.eea.europa.eu/data-and-maps/data/eea-reference-grids-2/
+
+http://www.marineregions.org/
+
+The grid is based on the recommendation at the 1st European Workshop on Reference Grids in 2003 and later INSPIRE geographical grid systems. For each country three vector polygon grid shape files, 1, 10 and 100 km, are available. The grids cover at least country borders - plus 15km buffer - and, where applicable, marine Exclusive Economic Zones v7.0 - plus 15km buffer - (www.vliz.be/vmdcdata/marbound). Note that the extent of the grid into the marine area does not reflect the extent of the territorial waters.
+
+EPSG 3035 Lambert Azimutal Equal Area
+ETRS89 / ETRS-LAEA
+
+
+load ezz
+
+```{r}
+EZZ.mad <- st_read(dsn = '../../../GIS/Marine GIS/output/EEZ_Madeira.shp')
+EZZ.mad.box <- st_bbox(EZZ.mad)
+EZZ.mad.box
+
+```
+
+buffer 15km
+
+```{r}
+EZZ.mad.sp <- as(st_geometry(EZZ.mad), "Spatial") # get geom and convert to sp object
+EZZ.mad.sp.eaqd <- spTransform(EZZ.mad.sp, CRSobj="+proj=aeqd +ellps=WGS84", center=TRUE) # project to aeqd center T
+EZZ.mad.eaqd <- st_as_sf(EZZ.mad.sp.eaqd) # back to sf object
+EZZ.mad.eaqd.15km <- st_buffer(EZZ.mad.eaqd, dist=15000) # get buffer
+```
+
+convert to EPSG 3035
+
+```{r}
+
+# st_coordinates(st_centroid(st_geometry(EZZ.mad)))
+
+EZZ.mad.3035.15km <- st_transform(EZZ.mad.eaqd.15km, 3035)
+
+# EZZ.mad.3035.15km <- st_transform(EZZ.mad.eaqd.15km, "+proj=laea +lat_0=32 +lon_0=-16 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+```
+
+Use polygon to make grid
+
+```{r}
+
+EZZ.mad.grid10km <- st_make_grid(EZZ.mad.3035.15km, cellsize = 10000, what="polygons")
+```
+
+Attributes
+
+```{r}
+md.area <- as.numeric(st_area(EZZ.mad.grid10km))
+
+md.xmin <- c()
+
+for(i in 1:length(EZZ.mad.grid10km)) {
+    md.xmin[i] <- st_bbox(EZZ.mad.grid10km[[i]])$xmin
+}
+
+md.ymin <- c()
+
+for(i in 1:length(EZZ.mad.grid10km)) {
+    md.ymin[i] <- st_bbox(EZZ.mad.grid10km[[i]])$ymin # give error ignore
+}
+
+cellcode <- paste0("10kmE", ymin)
+  
+data <- data.frame(area = md.area,
+                   xmin = md.xmin,
+                   ymin = md.ymin)
+
+EZZ.mad.grid10km.df <- st_sf(cbind(data, EZZ.mad.grid10km))
+
+```
+
+
+
+```{r}
+EZZ.mad.grid10km.df.4326 <- st_transform(EZZ.mad.grid10km.df, 4326)
+EZZ.mad.4326.15km <- st_transform(EZZ.mad.eaqd.15km, 4326)
+grid_int <- st_intersects(EZZ.mad.3035.15km, EZZ.mad.grid10km.df)
+int <- grid_int[[1]]
+EZZ.mad.grid10km.3035 <- st_transform(EZZ.mad.grid10km.df.4326[int,], 3035)
+
+st_write(EZZ.mad.grid10km.3035, "output/EZZ_grid_10km.shp", delete_dsn = T) 
+
+
+```
+
+
+
+```{r}
+st_contains
+```
+
+
+Rasterize bounding box
+
+```{r}
+
+```
+
+Convert to equal area
+
+
+```{r}
+
+```
+
+Get vector grid
+
+```{r}
+
+```
+
+Select polygon grid based on 15 km buffer from EZZ
+
+
+```{r}
+
+```
+
+Code cells based on lower left corner 
+
+cellcode  resKME2-3digitsN3digits  10kmE100N200
+
+```{r}
+
+```
+
+
+
+```{r}
+require(raster)
+
+
+
+SSTANO4KM <- raster('output/SSTANO4KM.tif') # read raster file saved on 03_EMISR script
+
+SSTANO4KM[] <- rnorm(ncell(SSTANO4KM))
+
+rToPoly <- as(SSTANO4KM, 'SpatialPolygonsDataFrame') # grid as polygon
+
+plot(rToPoly)
+rToPoly <- st_as_sf(rToPoly) # easier to save using sf classes
+st_write(rToPoly, "output/ezz_grid_4km.shp", delete_dsn = T)
+
+```
+
+
+
+
+
+Try to include codes in each cell
+
+
+```{r}
+
+r <- CHLA4KM.crop[[1]]
+r[] <- rnorm(ncell(r))
+
+rToPoly <- as(r, 'SpatialPolygonsDataFrame') # grid as polygon
+
+rToPoly$code <- paste0(rownames(y), colnames(y))
+
+
+y <- matrix(x, nrow = 10, ncol = 15, dimnames = list(1:10, c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l","m", "n", "o")))
+
+
+plot(rToPoly)
+rToPoly <- st_geometry(st_as_sf((rToPoly))) # easier to save using sf classes
+colnames(rToPoly) <- 
+
+r[] <- 0
+st_write(rToPoly, "output/grid_4km.shp", delete_dsn = T)
+
+# 1/2
+
+r <- raster(extent(rToPoly))
+r.2942 <- projectRaster(r, crs = CRS("+init=epsg:2942"))
+
+r.2942 <- disaggregate(r.2942, 1)
+
+r.4326 <- projectRaster(r.2942, crs = CRS("+init=epsg:4326"))
+
+rToPoly <- as(r.4326, 'SpatialPolygonsDataFrame') # grid as polygon
+rToPoly <- st_geometry(st_as_sf((rToPoly))) # easier to save using sf classes
+st_write(rToPoly, "output/grid_xkm.shp", delete_dsn = T)
+
+
+```
+
+
+## Aggregating data into grids of different resolutions
+

@@ -1,0 +1,131 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+## Distance to land
+
+Get a bounding box (need to change)
+
+
+
+```{r}
+
+require(rgeos)
+require(raster)
+
+cl.pol.mad <- l[[1]] ## madeira plus other islands
+
+cl.pol.mad.2942 <- st_transform(cl.pol.mad, crs = 2942)  # utm
+
+
+r_4326 <- raster("output/r_4326.tif") # load raster 
+
+r_2942 <- projectRaster(r_4326, crs = "+proj=utm +zone=28 +ellps=intl +towgs84=-499,-249,314,0,0,0,0 +units=m +no_defs") 
+
+cl.pol.mad.2942.sp  <- as(cl.pol.mad.2942, "Spatial") # need points
+
+
+cl.pol.mad.2942.sp.crop <- crop(cl.pol.mad.2942.sp, r_2942) # get main island
+
+cl.pol.mad.2942.sp <- as(cl.pol.mad.2942.sp.crop, "SpatialLines") 
+
+
+r_2942.sp <- as(r_2942,"SpatialPoints")
+
+
+
+d <- gDistance(r_2942.sp, cl.pol.mad.2942.sp.crop, byid=TRUE)
+
+dmin = apply(d,2,min)
+
+r_2942[] = dmin
+
+writeRaster(r_2942, "output/raster_distance.tif")
+
+```
+
+
+
+
+
+```{r}
+library(raster)
+library(rnaturalearth)
+library(sf)
+
+if(!file.exists("output/ne_world_large.shp")) {
+  wrld_detailed <- ne_download(type="land", scale='large', category = 'physical')
+} else {
+  wrld_detailed.sf <- st_read("output/ne_world_large.shp")
+}
+
+# https://stackoverflow.com/questions/35555709/global-raster-of-geographic-distances  
+# Create a raster template for rasterizing the polys. 
+# (set the desired grid resolution with res)
+r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=1)
+
+# Rasterize and set land pixels to NA
+r2 <- rasterize(wrld_detailed.sf, r, 0, background = 1)
+r2[r2==0] <- NA
+
+r3 <- mask(is.na(r2), r2, maskvalue=1, updatevalue=NA)
+# Calculate distance to nearest non-NA pixel
+d <- distance(r3)
+
+# Optionally set non-land pixels to NA (otherwise values are "distance to non-land")
+d <- d*r2
+
+writeRaster(d, "output/distanceToCoast_derailed.tif")
+```
+
+
+```{r}
+library(rasterVis)
+levelplot(d/1000, margin=FALSE, at=seq(0, maxValue(d)/1000, length=100),
+          colorkey=list(height=0.6), main='Distance to coast')
+```
+
+
+```{r}
+library(raster)
+library(mapdata)
+
+# https://stackoverflow.com/questions/35555709/global-raster-of-geographic-distances  
+# Create a raster template for rasterizing the polys. 
+# (set the desired grid resolution with res)
+r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, res=1)
+
+# Rasterize and set land pixels to NA
+r2 <- rasterize(wrld_simpl, r, 0, background = 1)
+r2[r2==0] <- NA
+
+r3 <- mask(is.na(r2), r2, maskvalue=1, updatevalue=NA)
+# Calculate distance to nearest non-NA pixel
+d <- distance(r3)
+
+# Optionally set non-land pixels to NA (otherwise values are "distance to non-land")
+d <- d*r2
+
+writeRaster(d, "output/distanceToCoast.tif")
+```
+
+```{r}
+library(rasterVis)
+levelplot(d/1000, margin=FALSE, at=seq(0, maxValue(d)/1000, length=100),
+          colorkey=list(height=0.6), main='Distance to coast')
+```
+
+
+
+```{r}
+
+centroid <- st_coordinates(st_centroid(st_read("output/mad_bb.shp")))
+r3 <- mask(is.na(r2), r2, maskvalue=1, updatevalue=NA)
+distMad <- distanceFromPoints(r3, centroid) 
+distMad <- mask(x = distMad, mask = r3, inverse=TRUE)
+
+writeRaster(distMad, filename='output/distanceToMadeira.tif', overwrite=T)
+```
+

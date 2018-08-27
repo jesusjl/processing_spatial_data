@@ -1,0 +1,121 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r echo=FALSE, include=FALSE}
+require(raster)
+require(ggplot2)
+require(knitr)
+require(kableExtra)
+```
+
+
+## SST
+
+
+### Year
+
+#### Mean
+
+```{r echo=FALSE, include=FALSE}
+
+SST4KM.crop.year.mean <- stack('output/sst4km_crop_year_mean.tif')
+names(SST4KM.crop.year.mean) <- paste0("SST4KM_",as.character(2000:2017))
+SST4KM.crop.year.mean
+```
+
+```{r echo=FALSE}
+plot(SST4KM.crop.year.mean)
+```
+
+#### Max
+
+```{r echo=FALSE, include=FALSE}
+
+SST4KM.crop.year.max <- stack('output/sst4km_crop_year_max.tif')
+names(SST4KM.crop.year.max) <- paste0("SST4KM_",as.character(2000:2017))
+SST4KM.crop.year.max
+```
+```{r}
+plot(SST4KM.crop.year.max)
+```
+
+
+
+#### Min
+
+
+```{r echo=FALSE, include=FALSE}
+
+SST4KM.crop.year.min <- stack('output/sst4km_crop_year_min.tif')
+names(SST4KM.crop.year.min) <- paste0("SST4KM_",as.character(2000:2017))
+SST4KM.crop.year.min
+```
+
+```{r}
+plot(SST4KM.crop.year.min)
+```
+
+
+### Month
+
+```{r echo=FALSE, include=FALSE}
+
+SST4KM.crop.month.mean <- stack('output/sst4km_crop_month_mean.tif')
+names(SST4KM.crop.month.mean) <- paste0("SST4KM_",c("Jan", "Feb", "Mar", "Apr", "May","Jun", "Jul", "Aug", "Sep","Oct", "Nov", "Dec"))
+SST4KM.crop.month.mean
+```
+
+```{r echo=FALSE}
+plot(SST4KM.crop.month.mean)
+```
+
+Plot using ggplot
+
+```{r}
+SST4KM.crop.month.df <- read.table("output/sst4km_crop_month.txt", sep = ",", header = TRUE)
+
+monthAsFactor <- factor(SST4KM.crop.month.df$variable, labels = c("Jan", "Feb", "Mar", "Apr", "May","Jun", "Jul", "Aug", "Sep","Oct", "Nov", "Dec"), ordered = FALSE)
+
+SST4KM.crop.month.df$month <-  monthAsFactor
+```
+
+```{r}
+ggplot(SST4KM.crop.month.df, aes(x=value)) + 
+  geom_histogram() +
+  stat_bin(bins=15) + 
+  theme_bw()
+
+```
+
+
+```{r}
+ggplot(SST4KM.crop.month.df) + 
+  geom_boxplot(aes(x = month, y = value)) +
+  theme_bw()
+```
+
+
+
+```{r}
+df <-  read.table("output/sst4km_crop_month_stat.txt",  sep = ",", header = TRUE)
+kable(df, "latex", booktabs = T) %>%
+  kable_styling(latex_options = "striped")
+```
+
+#### Max
+
+
+```{r echo=FALSE, include=FALSE}
+
+SST4KM.crop.month.max <- stack('output/sst4km_crop_month_max.tif')
+names(SST4KM.crop.month.max) <- paste0("SST4KM_",c("Jan", "Feb", "Mar", "Apr", "May","Jun", "Jul", "Aug", "Sep","Oct", "Nov", "Dec"))
+SST4KM.crop.month.max
+```
+
+
+#### Mean
+

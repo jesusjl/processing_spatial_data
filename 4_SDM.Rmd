@@ -1,0 +1,62 @@
+---
+title: "Species Distribution Modeling"
+output: html_notebook
+---
+
+Check RM and GIS for Ecologist: chapter 13
+
+For presence–absence data the aim is to estimate the probability of occupancy. Note that, without further information, we can strictly only estimate the probability of recording the species. If there is no observation bias, these two probabilities might be closely related. For presence-only data, we cannot calculate a probability of occupancy; however, assuming that the observed density of locations in a region reflects the density of the species, we may be able to estimate relative densities, that is, we can potentially say that we expect twice as many individuals in area A than in area B.
+
+Statistical methods such as Random Forest, generalized additive models (GAMs) or Maxent are then used to estimate the probability of recording the species or the relative density of species records as a function of the environmental conditions.
+
+While the original data are provided in geographic space (that is, characterized by their geographic coordinates), the analysis focuses just on the response of the species in the environmental space, that is, how species density records change with environmental conditions such as forest cover or temperature. In a further step, the fitted statistical model can be used to make predictions in geographic space, assigning each spatial unit the probability or relative density value that corresponds to the environmental conditions found at that spatial unit.
+
+Response (species observation) + Predictors -> Statistics -> Spatial prediction
+
+
+A recipe:
+
+Dormann (2011): 
+
+- problem formulation; 
+- data collection; 
+- data pre-processing; 
+- modelling; 
+- interpretation; 
+- iterate process.
+
+## Problem formulation
+
+Predict distribution?
+Understand which environmental conditions are important for the species?
+Quantify the effect of a particular predictor?
+Just good and poor habitat?
+Predicted probabilities reliable?
+
+Presence only data do not allow infering the probability of finding the species
+
+### Conceptual Model
+
+Guide data collection
+Interpretation of results
+
+
+## Data collection
+
+
+
+
+
+
+
+
+## Extract values using the sampling points
+
+```{r}
+
+
+sites.sp.chla.4km <- extract(turkeys.chla.4km, sites.sp, weights=TRUE, fun=mean)
+
+```
+
+

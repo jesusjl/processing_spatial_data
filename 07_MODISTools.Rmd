@@ -1,0 +1,75 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+Beyond EMISR there are other packages available to download MODIS data
+
+
+MODISTools
+
+https://github.com/khufkens/MODISTools/
+
+https://www.rdocumentation.org/packages/MODISTools/versions/0.95.1
+
+Laads (under development)
+
+https://github.com/maelle/laads
+
+
+Also time series can be downloaded from the below website
+
+https://oceancolor.gsfc.nasa.gov/
+
+https://giovanni.gsfc.nasa.gov/giovanni/
+
+Check tutorials
+
+https://conservationecology.wordpress.com/2014/08/11/bulk-downloading-and-analysing-modis-data-in-r/
+
+
+
+
+```{r}
+library(MODISTools)
+```
+
+
+
+List all available data products
+
+```{r}
+products <- mt_products()
+products
+```
+
+
+Only MODIS Land Products ....
+
+
+## MODIS tool
+
+
+
+```{r}
+require(MODIS)
+getProduct()
+
+```
+
+```{r}
+getProduct("MOD11B3") #  Monthly Tile Temperature product from MODIS Terra with a ground resolution of 5600 m
+getProduct("MOD17A*")
+getProduct("MYD17A3H")
+```
+
+
+## Ocean Color website
+
+https://oceancolor.gsfc.nasa.gov/cgi/browse.pl?sen=am
+
+```{r}
+mad.bb.sp
+```
+

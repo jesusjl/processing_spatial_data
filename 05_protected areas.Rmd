@@ -1,0 +1,59 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+D:/SHARE/PROYECTOS/MARE/02_PROJECTS/02_DATA_MANAGEMENT/DATA/GEODATA/AreasProtegidasRAM/╡reas Protegidas RAM.kmz|layername=Parque Natural
+
+```{r}
+require(sf)
+require(tidyverse)
+```
+
+```{r}
+layers <- st_layers(dsn = "../data/AreasProtegidasRAM/doc.kml")
+```
+
+
+```{r}
+parque.natural <- st_read(dsn = "../data/AreasProtegidasRAM/doc.kml", layer = layers$name[1])
+
+parque.natural <- dplyr::select(parque.natural, Name)
+parque.natural <- st_zm(parque.natural)
+plot(parque.natural)
+st_write(parque.natural, dsn = "output/protected_areas.shp")
+```
+
+```{r}
+areas.marinhas <- st_read(dsn = "../data/AreasProtegidasRAM/doc.kml", layer = layers$name[2])
+areas.marinhas <- dplyr::select(areas.marinhas, Name)
+areas.marinhas <- st_zm(areas.marinhas)
+plot(areas.marinhas)
+st_write(areas.marinhas, dsn = "output/marine_protected_areas.shp")
+```
+
+```{r}
+interesse.comunitario <- st_read(dsn = "../data/AreasProtegidasRAM/doc.kml", layer = layers$name[3])
+interesse.comunitario <- dplyr::select(areas.marinhas, Name)
+interesse.comunitario <- st_zm(interesse.comunitario)
+plot(interesse.comunitario)
+st_write(interesse.comunitario, dsn = "output/site_of_community_interest.shp", delete_dsn  = T)
+```
+
+
+```{r}
+zona.especial <- st_read(dsn = "../data/AreasProtegidasRAM/doc.kml", layer = layers$name[4])
+zona.especial <- dplyr::select(zona.especial, Name)
+zona.especial <- st_zm(zona.especial)
+plot(zona.especial)
+st_write(zona.especial, dsn = "output/special_protected_area.shp", delete_dsn = TRUE)
+```
+
+```{r}
+natural.reserve <- st_read(dsn = "../AreasProtegidasRAM/doc.kml", layer = layers$name[5])
+natural.reserve <- dplyr::select(natural.reserve, Name)
+natural.reserve <- st_zm(natural.reserve)
+plot(natural.reserve)
+st_write(natural.reserve, dsn = "output/natural_reserve.shp")
+```
+

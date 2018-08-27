@@ -1,0 +1,1187 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Introduction
+
+### Products
+
+EMISR is a package to download RS dataset from EMIS website. 
+
+```{r echo=FALSE}
+
+require(EMISR)
+
+# read available datasets at 4 and 2km resolution
+
+data_emis_4km<-read_emis_wcst_data(resolution="4km",emis_wcst_url="http://emis.jrc.ec.europa.eu/webservices/4km/wcs-t")
+
+data_emis_2km<-read_emis_wcst_data(resolution="2km",emis_wcst_url="http://emis.jrc.ec.europa.eu/webservices/2km/wcs-t")
+  
+```
+
+So far we are interested in:
+
+- MODIS-T 4km SST (degree-C)
+- MODIS-A 4km CHLA (log10 mg.m^-3)
+- ANOMALIES
+- MODIS-A 4km PAR
+- PAS, OXYRISK (link)[http://mcc.jrc.ec.europa.eu/emis/dev.py?N=simple&O=292&titre_page=Definition%20of%20eutrophication&titre_chap=EUTROPHICATION]
+- 
+
+### Resolutions
+
+
+4Km and 2 Km resolutions are available but at different time spams.
+
+Retrieve data products details:
+
+4km
+
+```{r}
+
+SST4KM <- data_emis_4km[data_emis_4km$name=="MODIS-T 4km SST",]
+SSTANO4KM <- data_emis_4km[data_emis_4km$name== "MODIS-T 4km SST Anomalies",]
+CHLA4KM <- data_emis_4km[data_emis_4km$name=="MODIS-A 4km CHLA",]
+CHLAANO4KM <- data_emis_4km[data_emis_4km$name=="MODIS-A 4km CHLA Anomalies",]
+
+PAR4KM <- data_emis_4km[data_emis_4km$name=="MODIS-A 4km PAR",]
+OXYRISK4KM <- data_emis_4km[data_emis_4km$name=="MODEL 4km OXYRISK",]
+PSA4KM <- data_emis_4km[data_emis_4km$name=="MODEL 4km PSA",]
+
+
+```
+
+2km
+
+```{r}
+
+CHLA2KM <- data_emis_2km[data_emis_2km$name=="MODIS-A 2km CHLA",]
+SST2KM <- data_emis_2km[data_emis_2km$name=="MODIS-T 2km SST",]
+
+
+```
+
+
+## Download
+
+### Extent
+
+
+A first bounding box based in territorial seas covering the entire archipielago (including Savage Island) is used. This can serve for a multipurpose GIS project.
+
+```{r echo=FALSE}
+require(sf)
+territorial.seas <- st_read(dsn = '../../../GIS/Marine GIS/output/territorial_seas_12nm_madeira.shp')
+ts.box <- st_bbox(territorial.seas)
+plot(territorial.seas)
+ts.box
+```
+
+EZZ makes more sense for a future GIS project
+
+```{r}
+EZZ.mad <- st_read(dsn = '../../../GIS/Marine GIS/output/EEZ_Madeira.shp')
+EZZ.mad.box <- st_bbox(EZZ.mad)
+plot(EZZ.mad)
+EZZ.mad.box
+ts.box <- EZZ.mad.box
+```
+
+Later we use a lower extent to cover just coastal areas from main Island 
+
+### EMIS DATA 4km
+
+Get data: SST, CHLA and PAR 
+
+```{r}
+
+
+if (!file.exists('output/SST4KM.tif')) {
+  
+  attach(SST4KM)
+  
+  SST4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(SST4KM.md, 'output/SST4KM.tif', overwrite=TRUE)
+  
+  detach(SST4KM)
+  
+  }
+
+
+if (!file.exists('output/SSTANO4KM.tif')) {
+  
+  attach(SSTANO4KM)
+  
+  SSTANO4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(SSTANO4KM.md, 'output/SSTANO4KM.tif', overwrite=TRUE)
+  
+  detach(SSTANO4KM)
+  
+}
+
+
+if (!file.exists('output/CHLA4KM.tif')) {
+
+  attach(CHLA4KM)
+  
+  CHLA4KM.md <- getemisdataseries(name = shortname, 
+                                  resolution = as.character(resolution), 
+                                  startdate = startdate, 
+                                  enddate = enddate, 
+                                  xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                  ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(CHLA4KM.md, 'output/CHLA4KM.tif', overwrite=TRUE)
+  
+  detach(CHLA4KM)
+}
+
+
+if (!file.exists('output/CHLAANO4KM.tif')) {
+
+  attach(CHLAANO4KM)
+  
+  CHLAANO4KM.md <- getemisdataseries(name = shortname, 
+                                  resolution = as.character(resolution), 
+                                  startdate = startdate, 
+                                  enddate = enddate, 
+                                  xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                  ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(CHLAANO4KM.md, 'output/CHLAANO4KM.tif', overwrite=TRUE)
+  
+  detach(CHLAANO4KM)
+}
+
+if (!file.exists('output/PAR4KM.tif')) {
+
+
+  attach(PAR4KM)
+  
+  PAR4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(PAR4KM.md, 'output/PAR4KM.tif',  overwrite=TRUE)
+  
+  detach(PAR4KM)
+}
+
+if (!file.exists('output/PSA4KM.tif')) {
+  
+  attach(PSA4KM)
+  
+  PSA4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(PSA4KM.md, 'output/PSA4KM.tif')
+  
+  detach(PSA4KM)
+  
+  }
+
+if (!file.exists('output/OXYRISK4KM.tif')) {
+  
+  attach(OXYRISK4KM)
+  
+  OXYRISK4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(OXYRISK4KM.md, 'output/OXYRISK4KM.tif')
+  
+  detach(OXYRISK4KM)
+  
+  }
+
+```
+
+#### Preprocessing
+
+##### Extent
+
+Clipping  previous raster using a bounding box of a buffer lenght of 5 km
+
+First we get the bounding box
+
+```{r}
+
+require(sf)
+
+foo <- st_read('output/cl_pol_mad.shp')
+
+foo2 <- st_cast(foo, 'POLYGON')
+
+i <- which(st_area(foo2)==max(st_area(foo2))) # identify main island by area
+
+mad.cl <- foo2$geometry[i] # get the main polygon
+
+mad.cl.sp <- as(mad.cl, "Spatial")
+
+mad.bb <-st_bbox(mad.cl)
+
+mad.bb.buff <- st_buffer(st_transform(st_as_sfc(mad.bb), 2942), dist = 5000)
+
+mad.bb.sp <- as((st_as_sfc(st_bbox(st_transform(mad.bb.buff, 4326)))), "Spatial") # a bounding box 
+
+
+```
+
+##### CHLA4KM
+
+
+Crop, mask and save
+
+```{r}
+
+CHLA4KM <- stack('output/CHLA4KM.tif') # stack retrieve the entire data serie
+
+CHLA4KM.crop <- raster::crop(x = CHLA4KM, y = mad.bb.sp )
+CHLA4KM.crop <- mask(CHLA4KM.crop, mask = mad.cl.sp, inverse=T) # use coastal polygon  to mask data from inside the island
+
+if (!file.exists('output/CHLA4KM_crop.tif')) writeRaster(CHLA4KM.crop, 'output/CHLA4KM_crop.tif', overwrite=T)
+
+```
+
+
+##### Aggregate data by time
+
+Once datasets are retrieved  they need to be aggregated by time (months / years): 
+
+Check time series from [EMIS website](http://mcc.jrc.ec.europa.eu/emis/dev.py?N=50&O=306&titre_page=4km%20Marine%20Data&titre_chap=Data%20discovery) 
+
+
+First question arise. How many months since the starting to the end date?. The number of months is equal to the number of layers from the raster stack. 
+
+Next function calculate the number of months between two dates.
+
+
+```{r}
+
+# turn a date into a 'monthnumber' relative to an origin
+monnb <- function(d) { lt <- as.POSIXlt(as.Date(d, origin="1900-01-01"))
+                          lt$year*12 + lt$mon }
+mondf <- function(d1, d2) { monnb(d2) - monnb(d1) }
+
+```
+
+
+Number of months for the CHLA4KM time series
+
+```{r}
+CHLA4KM.ts.month <- mondf(as.Date("2002-07-01"), as.Date("2017-11-01"))
+
+```
+
+From EMIS website. 
+
+```{r}
+seq.1 <- seq.Date(from = as.Date("2002-07-01"), to = as.Date("2002-12-31"), by = "month", lenght.out=12)
+seq.2 <- seq.Date(from = as.Date("2003-01-31"), to = as.Date("2016-12-31"), by = "month", lenght.out=12)
+seq.3 <- seq.Date(from = as.Date("2017-01-31"), to = as.Date("2017-10-31"), by = "month", lenght.out=12)
+
+seqt <- c(seq.1, seq.2, seq.3)
+```
+
+Use setZ to include time and zApply / stackApply  to perform temporal calculations on gridded time series.
+
+
+##### Month
+
+
+###### Mean
+
+Get a mean value per month (yield 12 dimensions).
+
+
+There are two methods to aggregate data by time. Using zApply function and stackApply. StackApply looks more solid but we try both to compare.
+
+
+First set time using a time series sequence
+
+```{r echo=FALSE, include=FALSE}
+require(raster)
+require(zoo)
+require(lubridate)
+CHLA4KM.crop <- stack('output/CHLA4KM_crop.tif')
+CHLA4KM.crop <- setZ(CHLA4KM.crop, seqt) # https://rdrr.io/cran/raster/man/zvalues.html
+
+```
+
+Use zApply to aggregate data by month
+
+```{r}
+CHLA4KM.crop.month <- zApply(CHLA4KM.crop, by=months, fun=mean, name='month')
+plot(CHLA4KM.crop.month)
+```
+
+
+Because some months are missing from the begining and the end of the time series (2002 and 2017), an incomplete time series missing has been built. Let's try to fix this.
+
+```{r}
+
+r <- CHLA4KM.crop[[1]] # get raster
+
+r[] <- NA # set NA values
+
+
+r1 <- stack(r,r,r,r,r,r) # stack for missing months in 2002
+r2 <- stack(r,r) # stack for missing months in 2002
+
+
+seqt.2002 <- seq.Date(from = as.Date("2002-01-01"), 
+                      to = as.Date("2002-06-01"), 
+                      by = "month", lenght.out=12) # seq for missing months
+
+seqt.2017 <- seq.Date(from = as.Date("2017-11-01"), 
+                      to = as.Date("2017-12-01"), 
+                      by = "month", lenght.out=12) # equal
+
+seqt.2002_2017 <- seq.Date(from = as.Date("2002-01-01"), 
+                           to = as.Date("2017-12-01"), 
+                           by = "month", lenght.out=12) # whole time serie
+
+
+r1 <- setZ(r1, seqt.2002) # set Z, probably not necessary at the step
+r2 <- setZ(r2, seqt.2017)
+
+r1CHLA <- stack(r1, CHLA4KM.crop) # fill with 2002 
+r1CHLA <- stack(r1CHLA, r2) # fill above with 2017
+
+r1CHLA <- setZ(r1CHLA, seqt.2002_2017) # set z
+```
+
+Now we try again 
+
+```{r}
+CHLA4KM.crop.month <- zApply(r1CHLA, by=months, fun=mean, name='month') # mean pixel value by month
+dim(CHLA4KM.crop.month) # check dimensions, should  be 12 layers
+plot(CHLA4KM.crop.month)
+```
+
+Why raster are not ordered by months?
+
+Consider using stackApply function
+
+https://gis.stackexchange.com/questions/237272/mean-by-month-on-r-stacked-raster
+
+
+stackApply
+
+```{r}
+indices <-  format(as.Date(getZ(r1CHLA), format = "X%Y.%m.%d"), format = "%m") 
+indices <- as.numeric(indices)
+
+```
+
+
+```{r}
+CHLA4KM.crop.month_alt <-  stackApply(r1CHLA, indices , fun = mean)
+plot(CHLA4KM.crop.month_alt)
+``` 
+
+
+Now raster are ordered by months but at first glance looks quite similar to above. Let's see.
+
+
+```{r}
+CHLA4KM.crop.month[[3]] - CHLA4KM.crop.month_alt[[2]]  # march minus december yield 0 ... 
+```
+
+Who is wrong? Time series data using zApply seems to be unordered. 
+
+Make sure to save alternative month timeseries using  stackApply (but check later what's going with zApply by months..)
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_month_mean.tif')) {
+  
+  writeRaster(CHLA4KM.crop.month_alt, 'output/CHLA4KM_crop_month_mean.tif', overwrite=T)
+  
+}
+```
+
+
+
+
+###### Max
+
+```{r}
+
+
+CHLA4KM.crop.month.max <-  stackApply(r1CHLA, indices , fun = max)
+plot(CHLA4KM.crop.month.max)
+``` 
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_month_max.tif')) {
+  
+  writeRaster(CHLA4KM.crop.month.max, 'output/CHLA4KM_crop_month_max.tif', overwrite=T)
+  
+}
+```
+
+
+
+```{r}
+CHLA4KM_crop_month_max.tif <- stack('output/CHLA4KM_crop_month_max.tif')
+```
+
+
+
+
+###### Min
+
+```{r}
+CHLA4KM.crop.month.min <-  stackApply(r1CHLA, indices , fun = min)
+plot(CHLA4KM.crop.month.min)
+``` 
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_month_min.tif')) {
+  
+  writeRaster(CHLA4KM.crop.month.min, 'output/CHLA4KM_crop_month_min.tif', overwrite=T)
+  
+}
+```
+
+
+##### Year
+
+###### Mean
+
+Get a mean value per year using zApply
+
+```{r}
+require(raster)
+require(zoo) 
+require(lubridate) # use year function
+CHLA4KM.crop <- stack('output/CHLA4KM_crop.tif')
+
+CHLA4KM.crop <- setZ(CHLA4KM.crop, seqt) # https://rdrr.io/cran/raster/man/zvalues.html
+CHLA4KM.crop.year <- zApply(CHLA4KM.crop, by=year, fun=mean, name='year')
+plot(CHLA4KM.crop.year)
+```
+
+
+
+Now with stackApply function
+
+```{r}
+
+indices <-  format(as.Date(getZ(r1CHLA), format = "X%Y.%m.%d"), format = "%y") 
+indices <- as.numeric(indices)
+
+CHLA4KM.crop.year.mean <-  stackApply(r1CHLA, indices , fun = mean)
+plot(CHLA4KM.crop.year.mean)
+```
+
+
+
+```{r}
+CHLA4KM.crop.year[[1]] - CHLA4KM.crop.year.mean[[1]]
+```
+
+
+Year is fine in both cases!!
+
+Save raster if not already
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_year_mean.tif')) {
+  
+  writeRaster(CHLA4KM.crop.year.mean, 
+              'output/CHLA4KM_crop_year_mean.tif', 
+              overwrite=T)
+}
+
+```
+
+
+###### Max
+
+
+```{r}
+CHLA4KM.crop.year.max <-  stackApply(r1CHLA, indices , fun = max)
+plot(CHLA4KM.crop.year.max)
+```
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_year_max.tif')) {
+  
+  writeRaster(CHLA4KM.crop.year.max, 
+              'output/CHLA4KM_crop_year_max.tif', 
+              overwrite=T)
+}
+
+```
+
+
+###### Min
+
+```{r}
+CHLA4KM.crop.year.min <-  stackApply(r1CHLA, indices , fun = min)
+plot(CHLA4KM.crop.year.min)
+```
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_year_min.tif')) {
+  
+  writeRaster(CHLA4KM.crop.year.min, 
+              'output/CHLA4KM_crop_year_min.tif', 
+              overwrite=T)
+}
+
+```
+
+###### Convert to mg.m^-3
+
+Warning. For CHLA data the values are given in log10 mg.m^-3 .  We need to get the antilog to convert to mg.m^-3.
+
+There's no built-in function in R so far. 
+
+```{r}
+
+antilog <- function(lx,base) { 
+  lbx<-lx/log(exp(1),base=base) 
+  result<-exp(lbx) 
+  result 
+} 
+
+```
+
+Get data and convert to mg.m^-3
+
+```{r}
+
+CHLA4KM.crop <- stack('CHLA4KM_crop.tif')
+CHLA4KM.crop <- antilog(CHLA4KM.crop, 10) # before saving check zero values 
+
+```
+
+For zero values the antilog is 1. Is that accurate? Consider asking developers.
+
+
+
+#### SST
+
+Read multitemporal 
+
+```{r}
+SST4KM <- stack('output/SST4KM.tif')
+
+SST4KM.crop <- raster::crop(x = SST4KM, y = mad.bb.sp )
+SST4KM.crop <- mask(SST4KM.crop, mask = mad.cl.sp, inverse=T)
+
+if(!file.exists('output/sst4km_crop.tif'))  writeRaster(SST4KM.crop, 'output/sst4km_crop.tif', overwrite=T)
+
+dim(SST4KM.crop)
+print(SST4KM.crop)
+
+```
+
+
+```{r}
+plot(SST4KM.crop[[208]])
+```
+
+
+Check time series 
+
+http://mcc.jrc.ec.europa.eu/emis/dev.py?N=50&O=306&titre_page=4km%20Marine%20Data&titre_chap=Data%20discovery
+
+EMIS_T_SST_MM_YYYY
+
+2000 Include January
+
+2017 Include from June
+
+
+```{r}
+SST4KM.crop <- stack('output/sst4km_crop.tif')
+```
+
+
+```{r}
+
+buildStack <- function(raster, n) {
+  r <- raster[[1]] # get first layer
+  r[] <- NA # set NA values
+  r <- stack(replicate(n, r)) # replicate based on missing temporal dataset
+}
+
+
+seqt.2000 <- seq.Date(from = as.Date("2000-01-31"), 
+                      to = as.Date("2000-01-31"), 
+                      by = "month", lenght.out=12) # seq for missing months
+
+seqt.2017 <- seq.Date(from = as.Date("2017-06-01"), 
+                      to = as.Date("2017-12-01"), 
+                      by = "month", lenght.out=12) # equal
+
+seqt.2000_2017 <- seq.Date(from = as.Date("2000-01-01"), 
+                           to = as.Date("2017-12-31"), 
+                           by = "month", lenght.out=12) # whole time serie
+
+r1 <- buildStack(SST4KM.crop, 1)
+r2 <- buildStack(SST4KM.crop, 7)
+
+
+r1SST <- stack(r1, SST4KM.crop) # fill with 2002 
+r1SST <- stack(r1SST, r2) # fill above with 2017
+
+r1SST <- setZ(r1SST, seqt.2000_2017) # set z
+saveRDS(r1SST, "r1SST.rds")
+```
+
+##### Year
+
+```{r}
+
+indices <-  format(as.Date(getZ(r1SST), format = "X%Y.%m.%d"), format = "%y") 
+indices <- as.numeric(indices)
+```
+
+
+###### Mean
+
+```{r}
+
+
+
+SST4KM.crop.year.mean <-  stackApply(r1SST, indices , fun = mean)
+plot(SST4KM.crop.year.mean)
+
+```
+
+
+```{r}
+if(!file.exists('output/sst4km_crop_year_mean.tif'))  writeRaster(SST4KM.crop.year.mean, 'output/sst4km_crop_year_mean.tif', overwrite=T)
+
+```
+
+
+###### Max
+
+```{r}
+
+SST4KM.crop.year.max <-  stackApply(r1SST, indices , fun = max)
+plot(SST4KM.crop.year.max)
+
+```
+
+```{r}
+if(!file.exists('output/sst4km_crop_year_max.tif'))  writeRaster(SST4KM.crop.year.max, 'output/sst4km_crop_year_max.tif', overwrite=T)
+
+```
+
+
+###### Min
+
+```{r}
+
+SST4KM.crop.year.min <-  stackApply(r1SST, indices , fun = min)
+plot(SST4KM.crop.year.min)
+
+```
+
+
+```{r}
+if(!file.exists('output/sst4km_crop_year_min.tif'))  writeRaster(SST4KM.crop.year.min, 'output/sst4km_crop_year_min.tif', overwrite=T)
+
+```
+
+
+
+##### Month
+
+```{r}
+
+indices <-  format(as.Date(getZ(r1SST), format = "X%Y.%m.%d"), format = "%m") 
+indices <- as.numeric(indices)
+
+```
+
+
+###### Mean
+```{r}
+
+SST4KM.crop.month.mean <-  stackApply(r1SST, indices , fun = mean)
+plot(SST4KM.crop.month.mean)
+
+```
+
+```{r}
+if(!file.exists('output/sst4km_crop_month_mean.tif'))  writeRaster(SST4KM.crop.month.mean, 'output/sst4km_crop_month_mean.tif', overwrite=T)
+
+```
+
+
+```{r}
+SST4KM.crop.month.mean 
+```
+
+
+###### Max
+
+```{r}
+
+SST4KM.crop.month.max <-  stackApply(r1SST, indices , fun = max)
+plot(SST4KM.crop.month.max)
+```
+
+
+```{r}
+if(!file.exists('output/sst4km_crop_month_max.tif'))  writeRaster(SST4KM.crop.month.max, 'output/sst4km_crop_month_max.tif', overwrite=T)
+
+```
+
+
+###### Min
+
+```{r}
+
+SST4KM.crop.month.min <-  stackApply(r1SST, indices , fun = min)
+plot(SST4KM.crop.month.min)
+```
+
+
+```{r}
+if(!file.exists('output/sst4km_crop_month_min.tif'))  writeRaster(SST4KM.crop.month.min, 'output/sst4km_crop_month_min.tif', overwrite=T)
+
+```
+
+#### PAR
+
+
+
+##### Year
+
+##### Month
+
+#### SST ANOMALIES
+
+##### Year
+
+##### Month
+
+#### CHLA ANOMALIES
+
+##### Year
+
+##### Month
+
+#### OXY
+
+##### Year
+
+##### Month
+
+#### PSA4KM
+
+##### Year
+
+##### Month
+
+
+### Results
+
+#### SST4KM
+
+##### Mean
+
+Bind values in a whole dataframe
+
+```{r}
+require(reshape2)
+
+SST4KM.crop.month.mean.df <- as.data.frame(SST4KM.crop.month.mean)
+
+
+names(SST4KM.crop.month.mean.df) <- c(1:12)
+
+SST4KM.crop.month.mean.df <- melt(SST4KM.crop.month.mean.df) # melt values and months
+
+
+foo <- factor(SST4KM.crop.month.mean.df$variable, labels = c("Jan", "Feb", "Mar", "Apr", "May","Jun", "Jul", "Aug", "Sep","Oct", "Nov", "Dec"), ordered = FALSE)
+
+
+SST4KM.crop.month.mean.df$month <-  foo
+
+
+```
+
+
+
+```{r}
+ggplot(SST4KM.crop.month.mean.df) + 
+  geom_boxplot(aes(x = month, y = value)) +
+  theme_bw()
+```
+
+
+
+```{r}
+write.table(SST4KM.crop.month.mean.df, 'output/sst4km_crop_month_mean.txt', row.names = FALSE, col.names = TRUE, sep = ",")
+```
+
+
+
+```{r}
+SST4KM.crop.month.mean.n <- cellStats(SST4KM.crop.month, stat='mean', na.rm=TRUE)
+SST4KM.crop.month.median.n <- cellStats(SST4KM.crop.month, stat='median', na.rm=TRUE)
+SST4KM.crop.month.max.n <- cellStats(SST4KM.crop.month, stat='max', na.rm=TRUE)
+SST4KM.crop.month.min.n <- cellStats(SST4KM.crop.month, stat='min', na.rm=TRUE)
+SST4KM.crop.month.sum.n <- cellStats(SST4KM.crop.month, stat='sum', na.rm=TRUE)
+SST4KM.crop.month.sd.n <- cellStats(SST4KM.crop.month, stat='sd', na.rm=TRUE)
+SST4KM.crop.month.skew.n <- cellStats(SST4KM.crop.month, stat='skew', na.rm=TRUE)
+SST4KM.crop.month.rms.n  <- cellStats(SST4KM.crop.month, stat='rms', na.rm=TRUE)
+
+SST4KM.crop.month.stat.df <-  data.frame(mean=SST4KM.crop.month.mean.n, median=SST4KM.crop.month.median.n, max = SST4KM.crop.month.max.n, min = SST4KM.crop.month.min.n, sum = SST4KM.crop.month.sum.n, sd = SST4KM.crop.month.sd.n, skew = SST4KM.crop.month.skew.n, rms = SST4KM.crop.month.rms.n)
+SST4KM.crop.month.skew
+rownames(SST4KM.crop.month.stat.df) <- c("Jan", "Feb", "Mar", "Apr", "May","Jun", "Jul", "Aug", "Sep","Oct", "Nov", "Dec")
+SST4KM.crop.month.stat.df <- data.frame(month = row.names(SST4KM.crop.month.stat.df), SST4KM.crop.month.stat.df)
+
+```
+
+```{r}
+
+write.table(SST4KM.crop.month.stat.df, "output/sst4km_crop_month_stat.txt", sep=',', row.names = FALSE)
+
+```
+
+Plot result
+
+```{r}
+plot(SST4KM.crop.month.mean.n)
+lines(SST4KM.crop.month.mean.n)
+```
+
+Order by min values
+
+```{r}
+sort(SST4KM.crop.month.mean.n)
+```
+
+February, March, April, January are the months with minimun values 
+
+
+Typical minimun:
+
+
+```{r}
+SST4KM.tm <-mean(sort(SST4KM.crop.month.mean.n)[1:4])
+```
+
+Range:
+
+```{r}
+SST4KM.tm.rg <-diff(range(sort(SST4KM.crop.month.mean.n)[1:4]))
+```
+
+Nº times min was below min avg:
+
+```{r}
+
+SST4KM.tm.n <- (sum(SST4KM.crop.month.mean.n < SST4KM.tm))
+
+```
+
+```{r}
+SST4KM.crop.month.mean[which(SST4KM.crop.month.mean.n < SST4KM.tm)]
+```
+
+Sum temp of anomaly: 
+
+```{r}
+## CHLA4KM.tm.sum <- sum(sort(CHLA4KM.crop.month.mean)[1:3]) 
+
+SST4KM.tm.sum <- sum(SST4KM.crop.month.mean.n[which(SST4KM.crop.month.mean.n < SST4KM.tm)]) # just one value
+
+```
+
+Nº times min was avobe min avg
+
+
+Degree heating (day / week / month)
+
+
+##### Max
+
+##### Min
+
+
+
+
+#### CHLA4KM
+
+##### Mean
+
+##### Max
+
+##### Min
+
+
+
+## EMIS DATA 2km
+
+Again the territorial seas bounding box if not already loaded.
+
+```{r}
+require(sf)
+territorial.seas <- st_read(dsn = '../../../GIS/Marine GIS/output/territorial_seas_12nm_madeira.shp')
+ts.box <- st_bbox(territorial.seas)
+plot(territorial.seas)
+ts.box
+```
+
+
+#### Download (check !!! 2 km)
+
+```{r}
+
+ts.box <-st_bbox(mad.bb.sp) # use a restricted extent
+
+if (!file.exists('output/SST4KM.tif')) {
+  
+  attach(SST4KM)
+  
+  SST4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(SST4KM.md, 'output/SST4KM.tif')
+  
+  detach(SST4KM)
+  
+  }
+
+
+if (!file.exists('output/CHLA2KM.tif')) {
+
+  attach(CHLA2KM)
+  
+  CHLA2KM.md <- getemisdataseries(name = shortname, 
+                                  resolution = as.character(resolution), 
+                                  startdate = startdate, 
+                                  enddate = enddate, 
+                                  xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                  ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(CHLA2KM.md, 'output/CHLA2KM.tif')
+  
+  detach(CHLA2KM)
+}
+
+if (!file.exists('output/CHLA4KM.tif')) {
+
+
+  attach(PAR4KM)
+  
+  PAR4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = ts.box["xmin"], xmax = ts.box["xmax"], 
+                                 ymin = ts.box["ymin"], ymax = ts.box["ymax"])
+  
+  writeRaster(PAR4KM.md, 'output/PAR4KM.tif')
+  
+  detach(PAR4KM)
+}
+
+```
+
+### CHLA2KM
+
+
+## SUMMARIES
+
+7 products should be yield
+
+Typical minimun (avg for winter months): 3 colder months (in a time data serie)
+  Typical range
+  Nº times min was below min avg
+  Nº times max was above max avg ?? min was above min avg
+  Sum temp of anomaly 
+  
+Degree heating (day / week / month)
+
+https://www.investopedia.com/terms/h/heatingdegreeday.asp    
+
+https://gis.stackexchange.com/questions/237272/mean-by-month-on-r-stacked-raster
+
+Typical maximum (avg for summer months)
+Direct Average
+
+Ex. typical minimum
+
+tm = 10ºC, n = 4, T values = 12, 13, 11, 11,  Ad
+
+Other stuff
+
+Understand how to aggregate datasets is critical to avoid messing with data. First download entire data serie. Each dataset include a span of several years with data per month. Later get an average per month (12 raster layers, one per month) and select the three months with minimum and maximum values (temperature, other variables) 
+
+```{r}
+require(raster)
+if(!exists("CHLA4KM.crop.month")) CHLA4KM.crop.month <- stack('output/CHLA4KM_crop_month.tif')
+dim(CHLA4KM.crop.month)
+print(CHLA4KM.crop.month)
+
+```
+
+
+Bind values in a whole dataframe
+
+```{r}
+require(reshape2)
+
+CHLA4KM.crop.month.df <- as.data.frame(CHLA4KM.crop.month)
+
+
+names(CHLA4KM.crop.month.df) <- c(1:12)
+
+CHLA4KM.crop.month.df <- melt(CHLA4KM.crop.month.df) # melt values and months
+
+```
+
+```{r}
+ggplot(CHLA4KM.crop.month.df) + 
+  geom_boxplot(aes(x = variable, y = value, colour=variable)) +
+  theme_bw()
+```
+
+Get a  mean value per month 
+
+
+```{r}
+CHLA4KM.crop.month.mean <- cellStats(CHLA4KM.crop.month, stat='mean', na.rm=TRUE)
+CHLA4KM.crop.month.median <- cellStats(CHLA4KM.crop.month, stat='median', na.rm=TRUE)
+CHLA4KM.crop.month.max <- cellStats(CHLA4KM.crop.month, stat='max', na.rm=TRUE)
+CHLA4KM.crop.month.min <- cellStats(CHLA4KM.crop.month, stat='min', na.rm=TRUE)
+CHLA4KM.crop.month.range <- cellStats(CHLA4KM.crop.month, stat='range', na.rm=TRUE)
+
+# other statistics available 
+# cellStats(CHLA4KM.crop.month_alt, stat='max', na.rm=TRUE) same as maxValue(CHLA4KM.crop.month_alt)
+
+```
+
+Plot result
+
+```{r}
+plot(CHLA4KM.crop.month.mean)
+lines(CHLA4KM.crop.month.mean)
+```
+
+
+```{r}
+ggplot(as.data.frame(CHLA4KM.crop.month.mean), aes(x = 1:12, y=CHLA4KM.crop.month.mean)) + 
+  geom_point() + 
+  geom_line() + 
+  scale_x_continuous(limits = c(1,12), breaks =c(1:12))
+```
+
+
+Order by min values
+
+```{r}
+sort(CHLA4KM.crop.month.mean)
+```
+
+September, July and June are the months with minimun values (august is the 4th)
+
+
+Typical minimun:
+
+
+```{r}
+CHLA4KM.tm <-mean(sort(CHLA4KM.crop.month.mean)[1:4])
+```
+
+
+Range:
+
+```{r}
+CHLA4KM.tm.rg <-diff(range(sort(CHLA4KM.crop.month.mean)[1:3]))
+```
+
+Nº times min was below min avg:
+
+```{r}
+
+CHLA4KM.tm.n <- sum(CHLA4KM.crop.month.mean < CHLA4KM.tm)
+
+```
+
+```{r}
+CHLA4KM.crop.month.mean[which(CHLA4KM.crop.month.mean < CHLA4KM.tm)]
+```
+
+Sum temp of anomaly: 
+
+```{r}
+## CHLA4KM.tm.sum <- sum(sort(CHLA4KM.crop.month.mean)[1:3]) 
+
+CHLA4KM.tm.sum <- sum(CHLA4KM.crop.month.mean[which(CHLA4KM.crop.month.mean < CHLA4KM.tm)]) # just one value
+
+```
+
+Nº times min was avobe min avg
+
+
+Degree heating (day / week / month)
+
+
+
+Other statistics to consider
+
+```{r}
+quantile(CHLA4KM.crop.month_alt)
+```
+
+```{r}
+
+CHLA4KM.crop.month_alt.quantile <- calc(CHLA4KM.crop.month_alt, fun=quantile, na.rm=TRUE)
+plot(CHLA4KM.crop.month_alt.quantile) # meaning? why 
+plot(CHLA4KM.crop.month_alt.quantile[[1]])
+```
+
+
+
+### Discussion
+
+NoData values close to the coast

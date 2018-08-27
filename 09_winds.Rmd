@@ -1,0 +1,28 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+https://rpubs.com/alobo/vectorplot
+
+https://www.ncdc.noaa.gov/data-access/marineocean-data/blended-global/blended-sea-winds
+
+
+
+Paper
+
+Time series analysis of data for sea surface temperature and upwelling components from the southwest coast of Portugal
+
+
+
+```{r}
+install.packages("oceanmap")
+install.packages("ocedata")
+library(oceanmap)
+library(oce)
+library(ocedata)
+library(oceanmap)
+
+
+
+```
+

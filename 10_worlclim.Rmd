@@ -1,0 +1,34 @@
+---
+title: "Worldclim"
+output: html_notebook
+---
+
+## WorldClim 
+
+
+
+```{r}
+require(raster)
+require(sf)
+```
+
+```{r}
+wc.tmin <- getData('worldclim', var='tmin', res=0.5, lon=-16.56321, lat=31.57872)
+plot(wc.tmin)
+```
+
+```{r}
+mad <- st_read('output/cl_pol_mad.shp')
+plot(mad)
+
+wc.tmin.mad <- extract(wc.tmin, mad)
+
+
+```
+```{r}
+
+wc.tmin.mad <- crop(wc.tmin, as_Spatial(st_geometry(mad)))
+plot(wc.tmin.mad)
+```
+
+

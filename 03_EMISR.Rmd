@@ -1,0 +1,335 @@
+---
+title: "EMIS timeseries"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Introduction
+
+EMISR is a package to download RS dataset from EMIS website. 
+
+## Products
+
+There are several products available. We can retrieve the complete list and see which are most useful for the particular purpose.
+
+```{r echo=FALSE}
+
+require(EMISR)
+
+# read available datasets at 4 and 2km resolution
+
+data_emis_4km<-read_emis_wcst_data(resolution="4km",emis_wcst_url="http://emis.jrc.ec.europa.eu/webservices/4km/wcs-t")
+
+data_emis_2km<-read_emis_wcst_data(resolution="2km",emis_wcst_url="http://emis.jrc.ec.europa.eu/webservices/2km/wcs-t")
+  
+```
+
+So far we are interested in several datasets:
+
+- MODIS-T 4km SST (degree-C)
+
+- MODIS-A 4km CHLA (log10 mg.m^-3)
+
+- ANOMALIES
+
+- MODIS-A 4km PAR
+
+- PAS, OXYRISK (link)[http://mcc.jrc.ec.europa.eu/emis/dev.py?N=simple&O=292&titre_page=Definition%20of%20eutrophication&titre_chap=EUTROPHICATION]
+
+
+## Details
+
+2Km and 4km resolutions are available.
+
+We can retrieve data products details:
+
+4km
+
+```{r}
+
+SST4KM <- data_emis_4km[data_emis_4km$name=="MODIS-T 4km SST",]
+SSTANO4KM <- data_emis_4km[data_emis_4km$name== "MODIS-T 4km SST Anomalies",]
+CHLA4KM <- data_emis_4km[data_emis_4km$name=="MODIS-A 4km CHLA",]
+CHLAANO4KM <- data_emis_4km[data_emis_4km$name=="MODIS-A 4km CHLA Anomalies",]
+
+PAR4KM <- data_emis_4km[data_emis_4km$name=="MODIS-A 4km PAR",]
+OXYRISK4KM <- data_emis_4km[data_emis_4km$name=="MODEL 4km OXYRISK",]
+PSA4KM <- data_emis_4km[data_emis_4km$name=="MODEL 4km PSA",]
+
+
+```
+
+2km
+
+```{r}
+
+CHLA2KM <- data_emis_2km[data_emis_2km$name=="MODIS-A 2km CHLA",]
+SST2KM <- data_emis_2km[data_emis_2km$name=="MODIS-T 2km SST",]
+PAR2KM <-  data_emis_4km[data_emis_4km$name=="MODIS-A 2km PAR",]
+
+```
+
+
+### Extent
+
+The function to download datasets require a bounding box. We use both  EZZ and territorial seas, but the former is used. As we pointed out before, we crop this raster stack later using a lower bounding box.  
+
+EZZ 
+
+```{r}
+EZZ.mad <- st_read(dsn = '../../../GIS/Marine GIS/output/EEZ_Madeira.shp')
+EZZ.mad.box <- st_bbox(EZZ.mad)
+#plot(EZZ.mad)
+EZZ.mad.box
+```
+
+Territorial Seas
+
+```{r echo=FALSE}
+require(sf)
+ts.mad <- st_read(dsn = '../../../GIS/Marine GIS/output/territorial_seas_12nm_madeira.shp')
+ts.mad.box <- st_bbox(ts.mad)
+#plot(territorial.seas)
+ts.box
+```
+
+
+EZZ bounding box. Uncomment to get the TS bounding box.
+
+```{r}
+emisRbbox <- EZZ.mad.box
+#emisRbbox <- ts.bbox
+```
+
+
+### EMIS DATA 4km
+
+Get 4km dataset: SST, CHLA and PAR. Other datasets are available but there are errors. 
+
+```{r}
+
+
+if (!file.exists('output/SST4KM.tif')) {
+  
+  attach(SST4KM)
+  
+  SST4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(SST4KM.md, 'output/SST4KM.tif', overwrite=TRUE)
+  
+  detach(SST4KM)
+  
+  }
+
+
+if (!file.exists('output/SSTANO4KM.tif')) {
+  
+  attach(SSTANO4KM)
+  
+  SSTANO4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(SSTANO4KM.md, 'output/SSTANO4KM.tif', overwrite=TRUE)
+  
+  detach(SSTANO4KM)
+  
+}
+
+
+if (!file.exists('output/CHLA4KM.tif')) {
+
+  attach(CHLA4KM)
+  
+  CHLA4KM.md <- getemisdataseries(name = shortname, 
+                                  resolution = as.character(resolution), 
+                                  startdate = startdate, 
+                                  enddate = enddate, 
+                                  xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                  ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(CHLA4KM.md, 'output/CHLA4KM.tif', overwrite=TRUE)
+  
+  detach(CHLA4KM)
+}
+
+
+if (!file.exists('output/CHLAANO4KM.tif')) {
+
+  attach(CHLAANO4KM)
+  
+  CHLAANO4KM.md <- getemisdataseries(name = shortname, 
+                                  resolution = as.character(resolution), 
+                                  startdate = startdate, 
+                                  enddate = enddate, 
+                                  xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                  ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(CHLAANO4KM.md, 'output/CHLAANO4KM.tif', overwrite=TRUE)
+  
+  detach(CHLAANO4KM)
+}
+
+if (!file.exists('output/PAR4KM.tif')) {
+
+
+  attach(PAR4KM)
+  
+  PAR4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(PAR4KM.md, 'output/PAR4KM.tif',  overwrite=TRUE)
+  
+  detach(PAR4KM)
+}
+
+if (!file.exists('output/PSA4KM.tif')) {
+  
+  attach(PSA4KM)
+  
+  PSA4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(PSA4KM.md, 'output/PSA4KM.tif')
+  
+  detach(PSA4KM)
+  
+  }
+
+if (!file.exists('output/OXYRISK4KM.tif')) {
+  
+  attach(OXYRISK4KM)
+  
+  OXYRISK4KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(OXYRISK4KM.md, 'output/OXYRISK4KM.tif')
+  
+  detach(OXYRISK4KM)
+  
+  }
+
+```
+
+
+### EMIS DATA 2km
+
+Equal to 2km datasets
+
+
+
+```{r}
+#emisRbbox <- ts.bbox
+emisRbbox <- EZZ.mad.box
+
+```
+
+
+```{r}
+
+if (!file.exists('output/SST2KM.tif')) {
+  
+  attach(SST2KM)
+  
+  SST2KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(SST2KM.md, 'output/SST2KM.tif')
+  
+  detach(SST2KM)
+  
+  }
+
+
+if (!file.exists('output/CHLA2KM.tif')) {
+
+  attach(CHLA2KM)
+  
+  CHLA2KM.md <- getemisdataseries(name = shortname, 
+                                  resolution = as.character(resolution), 
+                                  startdate = startdate, 
+                                  enddate = enddate, 
+                                  xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                  ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(CHLA2KM.md, 'output/CHLA2KM.tif')
+  
+  detach(CHLA2KM)
+}
+
+if (!file.exists('output/PAR2KM.tif')) {
+
+
+  attach(PAR2KM)
+  
+  PAR2KM.md <- getemisdataseries(name = shortname, 
+                                 resolution = as.character(resolution), 
+                                 startdate = startdate, 
+                                 enddate = enddate, 
+                                 xmin = emisRbbox["xmin"], xmax = emisRbbox["xmax"], 
+                                 ymin = emisRbbox["ymin"], ymax = emisRbbox["ymax"])
+  
+  writeRaster(PAR2KM.md, 'output/PAR2KM.tif')
+  
+  detach(PAR2KM)
+}
+
+```
+
+
+### Crop
+
+A new bounding box is produced to crop the previously downloaded datasets. 
+
+This bounding box is done by buffering the coast line using a distance of 5Km
+
+
+```{r}
+
+require(sf)
+
+cl.pol.mad <- st_read('output/cl_pol_mad.shp')
+
+cl.pol.mad <- st_cast(foo, 'POLYGON')
+
+i <- which(st_area(cl.pol.mad)==max(st_area(cl.pol.mad))) # identify main island by area
+
+mad.cl <- cl.pol.mad$geometry[i] # get the main polygon
+
+mad.cl.sp <- as(mad.cl, "Spatial")
+
+mad.bb <-st_bbox(mad.cl)
+
+mad.bb.buff <- st_buffer(st_transform(st_as_sfc(mad.bb), 2942), dist = 5000)
+
+mad.bb.sp <- as((st_as_sfc(st_bbox(st_transform(mad.bb.buff, 4326)))), "Spatial") # a bounding box 
+mad.bb.sf <- st_as_sf(mad.bb.sp)
+
+st_write(mad.bb.sf, "output/mad_bb.shp")
+```
+

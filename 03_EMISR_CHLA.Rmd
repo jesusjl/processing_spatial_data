@@ -1,0 +1,630 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+bibliography: 'references.bib'
+---
+
+# CHLA (4KM)
+
+## Extent
+
+Get the previously computed bounding box to crop raster stack
+
+```{r}
+mad.bb.sf <- st_read("output/mad_bb.shp")
+mad.bb.sp <- as(mad.bb.sf, "Spatial")
+```
+
+
+## Crop
+
+
+Crop, mask and save
+
+```{r}
+
+if (!file.exists('output/CHLA4KM_crop.tif')) {
+  CHLA4KM <- stack('output/CHLA4KM.tif') # stack retrieve the entire data serie
+  CHLA4KM.crop <- raster::crop(x = CHLA4KM, y = mad.bb.sp )
+  CHLA4KM.crop <- mask(CHLA4KM.crop, mask = mad.cl.sp, inverse=T) # use coastal polygon to mask data from inland
+      writeRaster(CHLA4KM.crop, 'output/CHLA4KM_crop.tif', overwrite=T)
+} else {
+  SST4KM.crop <- stack('output/sst4km_crop.tif')
+}
+
+```
+
+
+##  Timeseries
+
+
+### Build temporal framework
+
+First retrieved datasets need to be aggregated by time (month, year, etc.). Check time series from [EMIS website](http://mcc.jrc.ec.europa.eu/emis/dev.py?N=50&O=306&titre_page=4km%20Marine%20Data&titre_chap=Data%20discovery).
+
+First question arise. How many months since the starting to the end date?. The number of months is equal to the number of layers from the raster stack. 
+
+Below function return the number of months between two dates.
+
+```{r}
+
+# turn a date into a 'monthnumber' relative to an origin
+monnb <- function(d) { lt <- as.POSIXlt(as.Date(d, origin="1900-01-01"))
+                          lt$year*12 + lt$mon }
+mondf <- function(d1, d2) { monnb(d2) - monnb(d1) }
+
+```
+
+
+Number of months for the CHLA4KM time series (check EMIS website).
+
+```{r}
+CHLA4KM.ts.month <- mondf(as.Date("2002-07-01"), as.Date("2017-11-01"))
+
+```
+
+From EMIS website. 
+
+```{r}
+seq.1 <- seq.Date(from = as.Date("2002-07-01"), to = as.Date("2002-12-31"), by = "month", lenght.out=12)
+seq.2 <- seq.Date(from = as.Date("2003-01-31"), to = as.Date("2016-12-31"), by = "month", lenght.out=12)
+seq.3 <- seq.Date(from = as.Date("2017-01-31"), to = as.Date("2017-10-31"), by = "month", lenght.out=12)
+
+seqt <- c(seq.1, seq.2, seq.3)
+```
+
+Use setZ to include time and zApply or stackApply  to perform temporal calculations on gridded time series.
+
+### Summarize 
+
+```{r}
+require(raster)
+require(zoo) 
+require(lubridate) # use year function
+```
+
+#### Year
+
+##### Mean
+
+There are two functions available so far to compute summarises based on time series raster.
+
+- zApply
+- stackApply
+
+stackApply looks more reliable, but require building a vector of indices. Not a problem.
+
+Get a mean value per year (zApply)
+
+```{r}
+CHLA4KM.crop <- stack('output/CHLA4KM_crop.tif')
+CHLA4KM.crop <- setZ(CHLA4KM.crop, seqt) # https://rdrr.io/cran/raster/man/zvalues.html
+CHLA4KM.crop.year.mean_zApply <- zApply(CHLA4KM.crop, by=year, fun=mean, name='year')
+plot(CHLA4KM.crop.year.mean_zApply)
+```
+
+Get a mean value per year (stackApply)
+
+
+Because some months are missing from the begining and the end of the time series (2002 and 2017), an complete time series missing has been built using NA values for months not included. 
+
+```{r}
+
+r <- CHLA4KM.crop[[1]] # get raster
+
+r[] <- NA # set NA values
+
+
+r1 <- stack(r,r,r,r,r,r) # stack for missing months in 2002
+r2 <- stack(r,r) # stack for missing months in 2002
+
+
+seqt.2002 <- seq.Date(from = as.Date("2002-01-01"), 
+                      to = as.Date("2002-06-01"), 
+                      by = "month", lenght.out=12) # seq for missing months
+
+seqt.2017 <- seq.Date(from = as.Date("2017-11-01"), 
+                      to = as.Date("2017-12-01"), 
+                      by = "month", lenght.out=12) # equal
+
+seqt.2002_2017 <- seq.Date(from = as.Date("2002-01-01"), 
+                           to = as.Date("2017-12-01"), 
+                           by = "month", lenght.out=12) # whole time serie
+
+
+r1 <- setZ(r1, seqt.2002) # set Z, probably not necessary at the step
+r2 <- setZ(r2, seqt.2017)
+
+r1CHLA <- stack(r1, CHLA4KM.crop) # fill with 2002 
+r1CHLA <- stack(r1CHLA, r2) # fill above with 2017
+
+r1CHLA <- setZ(r1CHLA, seqt.2002_2017) # set z. This value is unique for each data serie
+```
+
+Now, it's time to get the indices parameter required by stackApply
+
+```{r}
+indices <-  format(as.Date(getZ(r1CHLA), format = "X%Y.%m.%d"), format = "%y") 
+indices <- as.numeric(indices)
+```
+
+Run stackApply
+
+```{r}
+
+CHLA4KM.crop.year.mean_stackApply <-  stackApply(r1CHLA, indices , fun = mean)
+plot(CHLA4KM.crop.year.mean_stackApply)
+```
+
+Check both methods
+
+```{r}
+CHLA4KM.crop.year.mean_zApply[[1]] - CHLA4KM.crop.year.mean_stackApply[[1]]
+```
+
+zApply and stackApply behave equal when summarising by year. As we will see below, months are unordered when using zApply.
+
+
+```{r}
+CHLA4KM.crop.year.mean <- CHLA4KM.crop.year.mean_stackApply
+rm(CHLA4KM.crop.year.mean_stackApply)
+rm(CHLA4KM.crop.year.mean_zApply)
+```
+
+Save raster if not already.
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_year_mean.tif')) {
+  
+  writeRaster(CHLA4KM.crop.year.mean, 
+              'output/CHLA4KM_crop_year_mean.tif')
+}
+
+```
+
+###### Max
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_year_max.tif')) {
+
+  CHLA4KM.crop.year.max <-  stackApply(r1CHLA, indices , fun = max)
+  writeRaster(CHLA4KM.crop.year.max, 'output/CHLA4KM_crop_year_max.tif')
+  
+} else {
+  
+  CHLA4KM.crop.year.max <- stack('output/CHLA4KM_crop_year_max.tif')
+
+  }
+
+```
+
+
+```{r}
+plot(CHLA4KM.crop.year.max)
+```
+
+###### Min
+
+```{r}
+CHLA4KM.crop.year.min <-  stackApply(r1CHLA, indices , fun = min)
+plot(CHLA4KM.crop.year.min)
+```
+
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_year_min.tif')) {
+  
+  writeRaster(CHLA4KM.crop.year.min, 
+              'output/CHLA4KM_crop_year_min.tif', 
+              overwrite=T)
+}
+
+```
+
+
+#### Month
+
+##### Mean
+
+Getting a mean value per month should return a RasterStack with nlayers equal to 12 dimensions.
+
+As we saw above, there are two methods to aggregate data by time. As claimed on the R Documentation, zApply is an experimental function to apply a function over a (time) series of layers of a Raster object
+
+
+First set time (z) using a time series sequence
+
+```{r echo=FALSE, include=FALSE}
+require(raster)
+require(zoo)
+require(lubridate)
+CHLA4KM.crop <- stack('output/CHLA4KM_crop.tif')
+CHLA4KM.crop <- setZ(CHLA4KM.crop, seqt) # https://rdrr.io/cran/raster/man/zvalues.html
+
+```
+
+Use zApply to aggregate data by month
+
+```{r}
+CHLA4KM.crop.month <- zApply(CHLA4KM.crop, by=months, fun=mean, name='month')
+plot(CHLA4KM.crop.month)
+```
+
+Now we try again 
+
+```{r}
+CHLA4KM.crop.month.mean_zApply <- zApply(r1CHLA, by=months, fun=mean, name='month') # mean pixel value by month
+dim(CHLA4KM.crop.month) # check dimensions, should  be 12 layers
+plot(CHLA4KM.crop.month)
+```
+
+Why raster are not ordered by months? Well, zApply is an experimental function. For safety, consider using stackApply function. A little help from (stackoverflow)[https://gis.stackexchange.com/questions/237272/mean-by-month-on-r-stacked-raster]
+
+### Summarize 
+
+#### Month
+
+###### Mean
+
+```{r}
+indices <-  format(as.Date(getZ(r1CHLA), format = "X%Y.%m.%d"), format = "%m") 
+indices <- as.numeric(indices)
+
+```
+
+
+```{r}
+CHLA4KM.crop.month.mean_stackApply <-  stackApply(r1CHLA, indices , fun = mean)
+plot(CHLA4KM.crop.month.mean_stackApply)
+``` 
+
+
+Now raster are ordered by months. Let's take a glance for both methods using different indexes.
+
+
+```{r}
+CHLA4KM.crop.month.mean_zApply[[3]] - CHLA4KM.crop.month.mean_stackApply[[2]]  # march minus december yield 0 ... 
+```
+
+Conclusion is that time series data using zApply seems to return an unordered stack when using month as the grouping variable. As a result, we save the monthly timeseries derived from stackApply.
+
+
+```{r}
+CHLA4KM.crop.month.mean <- CHLA4KM.crop.month.mean_stackApply
+rm(CHLA4KM.crop.month.mean_stackApply)
+rm(CHLA4KM.crop.month.mean_zApply)
+```
+
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_month_mean.tif')) {
+  
+  writeRaster(CHLA4KM.crop.month.mean, 'output/CHLA4KM_crop_month_mean.tif', overwrite=T)
+  
+}
+
+```
+
+###### Max
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_month_max.tif')) {
+  
+  CHLA4KM.crop.month.max <-  stackApply(r1CHLA, indices , fun = max)
+  writeRaster(CHLA4KM.crop.month.max, 'output/CHLA4KM_crop_month_max.tif', overwrite=T)
+
+  } else {
+    
+  CHLA4KM.crop.month.max <- stack('output/CHLA4KM_crop_month_max.tif')
+
+  }
+
+```
+
+Plot maximum time serie
+
+```{r}
+plot(CHLA4KM.crop.month.max)
+```
+
+
+###### Min
+
+
+```{r}
+
+if(!file.exists('output/CHLA4KM_crop_month_min.tif')) {
+  
+  CHLA4KM.crop.month.min <-  stackApply(r1CHLA, indices , fun = min)
+  writeRaster(CHLA4KM.crop.month.min, 'output/CHLA4KM_crop_month_min.tif', overwrite=T)
+  
+} else {
+  CHLA4KM.crop.month.min <- stack('output/CHLA4KM_crop_month_min.tif')
+}
+```
+
+Plot minimum time series
+
+```{r}
+plot(CHLA4KM.crop.month.min)
+```
+
+
+So far  we have 3 monthly and 3 yearly datasets summarized by mean, max and min. Now we need to check for seasonality.
+
+###### Convert to mg.m^-3
+
+Warning. For CHLA data the values are given in log10 mg.m^-3 .  The antilog is required to convert them to mg.m^-3.
+
+There's no built-in function in R so far. 
+
+```{r}
+
+antilog <- function(lx,base) { 
+  lbx<-lx/log(exp(1),base=base) 
+  result<-exp(lbx) 
+  result 
+} 
+
+```
+
+Convert to mg.m^-3
+
+```{r}
+
+CHLA4KM.crop <- stack('CHLA4KM_crop.tif')
+CHLA4KM.crop <- antilog(CHLA4KM.crop, 10) # before saving check zero values 
+
+```
+
+Dilema. Antilog zero values return 1. Is that accurate? Consider asking developers. For now, just keep the antilog.
+
+
+## Results
+
+Once raster timeseries has been reduced to monthly and yearly datasets it is time to explore the timeseries. 
+
+### Month
+
+#### Mean
+
+##### Summarize by raster
+
+Bind values in a whole dataframe
+
+```{r}
+require(reshape2)
+
+CHLA4KM.crop.month.mean.df <- as.data.frame(CHLA4KM.crop.month.mean)
+
+
+names(CHLA4KM.crop.month.mean.df) <- c(1:12)
+
+CHLA4KM.crop.month.mean.df <- melt(CHLA4KM.crop.month.mean.df) # melt values and months
+
+
+monthAsFactor <- factor(CHLA4KM.crop.month.mean.df$variable, labels = c("Jan", "Feb", "Mar", "Apr", "May","Jun", "Jul", "Aug", "Sep","Oct", "Nov", "Dec"), ordered = FALSE)
+
+
+CHLA4KM.crop.month.mean.df$month <-  monthAsFactor
+
+
+```
+
+
+```{r}
+
+if (!file.exists('output/chla4km_crop_month_mean.txt')){
+  write.table(CHLA4KM.crop.month.mean.df, 
+              'output/chla4km_crop_month_mean.txt', row.names = FALSE, col.names = TRUE, sep = ",")
+} 
+```
+
+```{r}
+ggplot(CHLA4KM.crop.month.mean.df) + 
+  geom_boxplot(aes(x = month, y = value)) +
+  theme_bw()
+```
+
+
+
+##### CHLA peak (CHLAP) seasonal value (mean based)
+
+Surprisingly CHLA peak are observed in February and March, but the time series show much more variability respecting SST. Notwithstanding, these pattern are observed by @Lyngsgaard2017.
+
+##### Summarize by scalar (single value)
+
+### CHLA2KM
+
+## SUMMARIES
+
+7 products should be yield
+
+Typical minimun (avg for winter months): 3 colder months (in a time data serie)
+  Typical range
+  Nº times min was below min avg
+  Nº times max was above max avg ?? min was above min avg
+  Sum temp of anomaly 
+  
+Degree heating (day / week / month)
+
+https://www.investopedia.com/terms/h/heatingdegreeday.asp    
+
+https://gis.stackexchange.com/questions/237272/mean-by-month-on-r-stacked-raster
+
+Typical maximum (avg for summer months)
+Direct Average
+
+Ex. typical minimum
+
+tm = 10ºC, n = 4, T values = 12, 13, 11, 11,  Ad
+
+Other stuff
+
+Understand how to aggregate datasets is critical to avoid messing with data. First download entire data serie. Each dataset include a span of several years with data per month. Later get an average per month (12 raster layers, one per month) and select the three months with minimum and maximum values (temperature, other variables) 
+
+```{r}
+require(raster)
+if(!exists("CHLA4KM.crop.month")) CHLA4KM.crop.month <- stack('output/CHLA4KM_crop_month.tif')
+dim(CHLA4KM.crop.month)
+print(CHLA4KM.crop.month)
+
+```
+
+
+Bind values in a whole dataframe
+
+```{r}
+require(reshape2)
+
+CHLA4KM.crop.month.df <- as.data.frame(CHLA4KM.crop.month)
+
+
+names(CHLA4KM.crop.month.df) <- c(1:12)
+
+CHLA4KM.crop.month.df <- melt(CHLA4KM.crop.month.df) # melt values and months
+
+```
+
+```{r}
+ggplot(CHLA4KM.crop.month.df) + 
+  geom_boxplot(aes(x = variable, y = value, colour=variable)) +
+  theme_bw()
+```
+
+Get a  mean value per month 
+
+
+```{r}
+CHLA4KM.crop.month.mean <- cellStats(CHLA4KM.crop.month, stat='mean', na.rm=TRUE)
+CHLA4KM.crop.month.median <- cellStats(CHLA4KM.crop.month, stat='median', na.rm=TRUE)
+CHLA4KM.crop.month.max <- cellStats(CHLA4KM.crop.month, stat='max', na.rm=TRUE)
+CHLA4KM.crop.month.min <- cellStats(CHLA4KM.crop.month, stat='min', na.rm=TRUE)
+CHLA4KM.crop.month.range <- cellStats(CHLA4KM.crop.month, stat='range', na.rm=TRUE)
+
+# other statistics available 
+# cellStats(CHLA4KM.crop.month_alt, stat='max', na.rm=TRUE) same as maxValue(CHLA4KM.crop.month_alt)
+
+```
+
+Plot result
+
+```{r}
+plot(CHLA4KM.crop.month.mean)
+lines(CHLA4KM.crop.month.mean)
+```
+
+
+```{r}
+ggplot(as.data.frame(CHLA4KM.crop.month.mean), aes(x = 1:12, y=CHLA4KM.crop.month.mean)) + 
+  geom_point() + 
+  geom_line() + 
+  scale_x_continuous(limits = c(1,12), breaks =c(1:12))
+```
+
+
+Order by min values
+
+```{r}
+sort(CHLA4KM.crop.month.mean)
+```
+
+September, July and June are the months with minimun values (august is the 4th)
+
+
+Typical minimun:
+
+
+```{r}
+CHLA4KM.tm <-mean(sort(CHLA4KM.crop.month.mean)[1:4])
+```
+
+
+Range:
+
+```{r}
+CHLA4KM.tm.rg <-diff(range(sort(CHLA4KM.crop.month.mean)[1:3]))
+```
+
+Nº times min was below min avg:
+
+```{r}
+
+CHLA4KM.tm.n <- sum(CHLA4KM.crop.month.mean < CHLA4KM.tm)
+
+```
+
+```{r}
+CHLA4KM.crop.month.mean[which(CHLA4KM.crop.month.mean < CHLA4KM.tm)]
+```
+
+Sum temp of anomaly: 
+
+```{r}
+## CHLA4KM.tm.sum <- sum(sort(CHLA4KM.crop.month.mean)[1:3]) 
+
+CHLA4KM.tm.sum <- sum(CHLA4KM.crop.month.mean[which(CHLA4KM.crop.month.mean < CHLA4KM.tm)]) # just one value
+
+```
+
+Nº times min was avobe min avg
+
+
+Degree heating (day / week / month)
+
+
+
+Other statistics to consider
+
+```{r}
+quantile(CHLA4KM.crop.month_alt)
+```
+
+```{r}
+
+CHLA4KM.crop.month_alt.quantile <- calc(CHLA4KM.crop.month_alt, fun=quantile, na.rm=TRUE)
+plot(CHLA4KM.crop.month_alt.quantile) # meaning? why 
+plot(CHLA4KM.crop.month_alt.quantile[[1]])
+```
+
+
+
+### Discussion
+
+NoData values close to the coast
+
+
+
+##### Year
+
+##### Month
+
+#### SST ANOMALIES
+
+##### Year
+
+##### Month
+
+#### CHLA ANOMALIES
+
+##### Year
+
+##### Month
+
+#### OXY
+
+##### Year
+
+##### Month
+
+#### PSA4KM
+
+##### Year
+
+##### Month
